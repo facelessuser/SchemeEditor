@@ -5,12 +5,19 @@
         "caption": "Color Scheme Editor",
         "command": "color_scheme_editor"
     },
+    // Creates a new theme in the editor
+    // (copy to seperate location first and set to current theme)
+    {
+        "caption": "Color Scheme Editor (new theme)",
+        "command": "color_scheme_editor",
+        "args": { "new_theme": true }
+    },
     // Open the current theme in the editor
     // (copy to seperate location first and set to current theme)
     {
         "caption": "Color Scheme Editor (current theme)",
         "command": "color_scheme_editor",
-        "args": {"current_theme": true}
+        "args": { "current_theme": true }
     },
     // Open the current theme in the editor
     // (directly edit the file without copying; unless

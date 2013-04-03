@@ -1,4 +1,8 @@
 {
     // Enable debugging in the log file: subclrschm.log
-    "debug": false
+    "debug": false,
+
+    // Executable paths
+    "osx": "${Packages}/User/subclrschm.app",
+    "windows": "${Packages}\\User\\subclrschm.exe"
 }
