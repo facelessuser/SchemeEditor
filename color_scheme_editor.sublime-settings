@@ -1,0 +1,4 @@
+{
+    // Enable debugging in the log file: subclrschm.log
+    "debug": false
+}

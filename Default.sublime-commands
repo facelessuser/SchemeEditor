@@ -1,0 +1,28 @@
+[
+    // Open the current theme in the editor
+    // (copy to seperate location first and set to current theme)
+    {
+        "caption": "Color Scheme Editor",
+        "command": "color_scheme_editor"
+    },
+    // Open the current theme in the editor
+    // (copy to seperate location first and set to current theme)
+    {
+        "caption": "Color Scheme Editor (current theme)",
+        "command": "color_scheme_editor",
+        "args": {"current_theme": true}
+    },
+    // Open the current theme in the editor
+    // (directly edit the file without copying; unless
+    // the theme is inside a sublime-package archive)
+    {
+        "caption": "Color Scheme Editor (current theme | direct write)",
+        "command": "color_scheme_editor",
+        "args": { "no_direct_edit": false, "current_theme": true }
+    },
+    // Open log file in Sublime Text
+    {
+        "caption": "Color Scheme Editor: Get Log",
+        "command": "color_scheme_editor_log"
+    }
+]
