@@ -4,7 +4,6 @@ from os.path import join, exists, basename, normpath, dirname
 from os import makedirs
 import subprocess
 import re
-from .default_new_theme import theme as default_new_theme
 import json
 import codecs
 from plistlib import writePlistToBytes
@@ -69,22 +68,9 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         settings = sublime.load_settings(PREFERENCES)
         scheme_file = settings.get(SCHEME, None)
         actual_scheme_file = None
-        open_json = False
+        file_select = False
 
-        if new_theme:
-            actual_scheme_file = join(sublime.packages_path(), "User", TEMP_FOLDER, "new_theme.tmTheme")
-            scheme_file = "%s/%s" % (TEMP_PATH, "new_theme.tmTheme")
-            try:
-                with codecs.open(actual_scheme_file, "w", "utf-8") as f:
-                    f.write(writePlistToBytes(default_new_theme).decode('utf-8'))
-            except Exception as e:
-                sublime.error_message(MSGS["new"])
-                return
-
-            # Load new theme
-            settings.set(SCHEME, scheme_file)
-
-        elif scheme_file is not None and current_theme:
+        if not new_theme and scheme_file is not None and current_theme:
             # Get real path
             actual_scheme_file = join(dirname(sublime.packages_path()), normpath(scheme_file))
 
@@ -110,12 +96,15 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
 
                 # Load unarchived theme
                 settings.set(SCHEME, "%s/%s" % (TEMP_PATH, basename(scheme_file)))
+        elif not new_theme:
+            file_select = True
 
         # Call the editor with the theme file
         subprocess.Popen(
             [THEME_EDITOR] +
             (["-d"] if bool(p_settings.get("debug", False)) else []) +
-            (["-j"] if open_json else []) +
+            (["-n"] if new_theme else []) +
+            (["-s"] if file_select else []) +
             ["-l", join(sublime.packages_path(), "User")] +
             ([actual_scheme_file] if actual_scheme_file is not None and exists(actual_scheme_file) else [])
         )
