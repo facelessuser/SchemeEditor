@@ -117,10 +117,10 @@ def check_version(editor, p_settings, platform):
         version = m.group(1)
         if version != LATEST_VERSION[platform]:
             ignore_key = "%s:%s" % (version, LATEST_VERSION[platform])
-            ignore_versions = p_settings.get("ignore_version_update", [])
-            if not ignore_key in ignore_versions:
+            ignore_versions = str(p_settings.get("ignore_version_update", ""))
+            if not ignore_key == ignore_versions:
                 if sublime.ok_cancel_dialog(MSGS["version"] % (version, LATEST_VERSION[platform]), "Ignore"):
-                    ignore_versions.append(ignore_key)
+                    ignore_versions = ignore_key
                     p_settings.set("ignore_version_update", ignore_versions)
                     sublime.save_settings(PLUGIN_SETTINGS)
     else:
