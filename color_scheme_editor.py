@@ -8,7 +8,7 @@ import json
 import codecs
 from plistlib import writePlistToBytes
 
-
+__version__ = "0.0.3"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
@@ -16,39 +16,38 @@ TEMP_PATH = "Packages/User/%s" % TEMP_FOLDER
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
-LATEST_VERSION = "0.0.2"
+LATEST_VERSION = {
+    "osx": __version__,
+    "windows": __version__,
+    "linux": "0.0.0"
+}
 
 MSGS = {
     "version": '''Color Scheme Editor:
-    You are currently running version %s of
-    subclrschm, %s is the expected version.
-    Some features may not work. Please consider
-    updating the editor for the best possible
-    experience.
+You are currently running version %s of subclrschm, %s is the expected version.  Some features may not work. Please consider updating the editor for the best possible experience.
 
-    Do you want to ignore this update?
-    ''',
+Do you want to ignore this update?
+''',
 
     "linux": '''Color Scheme Editor:
-    Sorry, currently no love for the penguin.
-    Linux support coming in the future.
-    ''',
+Sorry, currently no love for the penguin. Linux support coming in the future.
+''',
 
     "access": '''Color Scheme Editor:
-    subclrschm cannot be accessed.
-    ''',
+subclrschm cannot be accessed.
+''',
 
     "binary": '''Color Scheme Editor:
-    Could not find subclrschm (the editor)!
-    ''',
+Could not find subclrschm (the editor)!
+''',
 
     "temp": '''Color Scheme Editor:
-    Could not copy theme file to temp directory.
-    ''',
+Could not copy theme file to temp directory.
+''',
 
     "new": '''Color Scheme Editor:
-    Could not create new theme.
-    '''
+Could not create new theme.
+'''
 }
 
 
@@ -110,17 +109,18 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         )
 
 
-def check_version(editor, p_settings):
+def check_version(editor, p_settings, platform):
     p = subprocess.Popen([editor, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out = p.communicate()
     m = re.match(r"subclrschm ([\d]*\.[\d]*\.[\d])*", out[1].decode('utf-8'))
     if m is not None:
         version = m.group(1)
-        if version != LATEST_VERSION:
+        if version != LATEST_VERSION[platform]:
+            ignore_key = "%s:%s" % (version, LATEST_VERSION[platform])
             ignore_versions = p_settings.get("ignore_version_update", [])
-            if not LATEST_VERSION in ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["version"] % (version, LATEST_VERSION), "Ignore"):
-                    ignore_versions.append(LATEST_VERSION)
+            if not ignore_key in ignore_versions:
+                if sublime.ok_cancel_dialog(MSGS["version"] % (version, LATEST_VERSION[platform]), "Ignore"):
+                    ignore_versions.append(ignore_key)
                     p_settings.set("ignore_version_update", ignore_versions)
                     sublime.save_settings(PLUGIN_SETTINGS)
     else:
@@ -153,6 +153,6 @@ def plugin_loaded():
         THEME_EDITOR = None
 
     elif THEME_EDITOR is not None:
-        check_version(THEME_EDITOR, p_settings)
+        check_version(THEME_EDITOR, p_settings, platform)
 
     p_settings.add_on_change('reload', plugin_loaded)
