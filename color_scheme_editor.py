@@ -8,7 +8,7 @@ import json
 import codecs
 from plistlib import writePlistToBytes
 
-__version__ = "0.0.3"
+MIN_EXPECTED_VERSION = "0.0.3"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
@@ -16,15 +16,15 @@ TEMP_PATH = "Packages/User/%s" % TEMP_FOLDER
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
-LATEST_VERSION = {
-    "osx": __version__,
-    "windows": __version__,
+MIN_VERSION = {
+    "osx": MIN_EXPECTED_VERSION,
+    "windows": MIN_EXPECTED_VERSION,
     "linux": "0.0.0"
 }
 
 MSGS = {
     "version": '''Color Scheme Editor:
-You are currently running version %s of subclrschm, %s is the expected version.  Some features may not work. Please consider updating the editor for the best possible experience.
+You are currently running version %s of subclrschm, %s is the minimum expected version.  Some features may not work. Please consider updating the editor for the best possible experience.
 
 Do you want to ignore this update?
 ''',
@@ -109,17 +109,29 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         )
 
 
+def version_compare(version, min_version):
+    cur_v = [int(x) for x in version.split('.')]
+    min_v = [int(x) for x in min_version.split('.')]
+
+    return not (
+        cur_v[0] < min_v[0] or
+        (cur_v[0] == min_v[0] and cur_v[1] < min_v[1]) or
+        (cur_v[0] == min_v[0] and cur_v[1] == min_v[1] and cur_v[2] < min_v[2])
+    )
+
+
 def check_version(editor, p_settings, platform):
     p = subprocess.Popen([editor, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out = p.communicate()
     m = re.match(r"subclrschm ([\d]*\.[\d]*\.[\d])*", out[1].decode('utf-8'))
     if m is not None:
         version = m.group(1)
-        if version != LATEST_VERSION[platform]:
-            ignore_key = "%s:%s" % (version, LATEST_VERSION[platform])
+        # True if versions are okay
+        if not version_compare(version, MIN_VERSION[platform]):
+            ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
             ignore_versions = str(p_settings.get("ignore_version_update", ""))
             if not ignore_key == ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["version"] % (version, LATEST_VERSION[platform]), "Ignore"):
+                if sublime.ok_cancel_dialog(MSGS["version"] % (version, MIN_VERSION[platform]), "Ignore"):
                     ignore_versions = ignore_key
                     p_settings.set("ignore_version_update", ignore_versions)
                     sublime.save_settings(PLUGIN_SETTINGS)
