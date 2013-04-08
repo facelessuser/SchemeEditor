@@ -2,6 +2,10 @@
     // Enable debugging in the log file: subclrschm.log
     "debug": false,
 
+    // Enable or disable live editing
+    // (live editing saves to the file right after changes are made)
+    "live_edit": true,
+
     // Executable paths
     "osx": "${Packages}/User/subclrschm.app",
     "windows": "${Packages}\\User\\subclrschm.exe"

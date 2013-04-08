@@ -8,7 +8,7 @@ import json
 import codecs
 from plistlib import writePlistToBytes
 
-MIN_EXPECTED_VERSION = "0.0.3"
+MIN_EXPECTED_VERSION = "0.0.5"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
@@ -104,6 +104,7 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
             (["-d"] if bool(p_settings.get("debug", False)) else []) +
             (["-n"] if new_theme else []) +
             (["-s"] if file_select else []) +
+            (["-L"] if bool(p_settings.get("live_edit", True)) else []) +
             ["-l", join(sublime.packages_path(), "User")] +
             ([actual_scheme_file] if actual_scheme_file is not None and exists(actual_scheme_file) else [])
         )
