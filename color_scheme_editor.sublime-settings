@@ -6,6 +6,13 @@
     // (live editing saves to the file right after changes are made)
     "live_edit": true,
 
+    // Enable or disable direct editing
+    // All files are copied to a a temp location before editing.
+    // If direct edit is enabled, the file will be edited directly
+    // except in cases where the theme file is inside an sublime-settings
+    // archive
+    "direct_edit": false,
+
     // Executable paths
     "osx": "${Packages}/User/subclrschm.app",
     "windows": "${Packages}\\User\\subclrschm.exe"

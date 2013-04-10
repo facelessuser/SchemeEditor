@@ -1,7 +1,10 @@
 import sublime
 import sublime_plugin
-from os.path import join, exists, basename, normpath, dirname
-from os import makedirs
+from os.path import join, exists, basename, normpath, dirname, isdir, splitext
+from os import listdir, walk, makedirs
+from fnmatch import fnmatch
+import re
+import zipfile
 import subprocess
 import re
 import json
@@ -51,6 +54,25 @@ Could not create new theme.
 }
 
 
+def strip_package_ext(pth):
+    return pth[:-16] if pth.lower().endswith(".sublime-package") else pth
+
+
+def sublime_format_path(pth):
+    m = re.match(r"^([A-Za-z]{1}):(?:/|\\)(.*)", pth)
+    if sublime.platform() == "windows" and m != None:
+        pth = m.group(1) + "/" + m.group(2)
+    return pth.replace("\\", "/")
+
+
+def sublime_package_paths():
+    return [sublime.installed_packages_path(), join(dirname(sublime.executable_path()), 'Packages')]
+
+
+def parse_binary_path(pth):
+    return normpath(pth).replace("${Packages}", sublime.packages_path())
+
+
 class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
     def run(self):
         log = join(sublime.packages_path(), "User", "subclrschm.log")
@@ -59,24 +81,31 @@ class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
-    def run(self, no_direct_edit=True, current_theme=False, new_theme=False):
+    def run(self, action=None, select_theme=None):
         if THEME_EDITOR is None:
             return
         # Get current color scheme
         p_settings = sublime.load_settings(PLUGIN_SETTINGS)
         settings = sublime.load_settings(PREFERENCES)
+        direct_edit = bool(p_settings.get("direct_edit", False))
         scheme_file = settings.get(SCHEME, None)
         actual_scheme_file = None
         file_select = False
 
-        if not new_theme and scheme_file is not None and current_theme:
+        if action == "select":
+            if select_theme is not None:
+                scheme_file = select_theme
+            else:
+                return
+
+        if action != "new" and scheme_file is not None and (action == "current" or action == "select"):
             # Get real path
             actual_scheme_file = join(dirname(sublime.packages_path()), normpath(scheme_file))
 
             # If scheme cannot be found, it is most likely in an archived package
             if (
                 not exists(actual_scheme_file) or
-                (no_direct_edit and not scheme_file.startswith(TEMP_PATH))
+                (not direct_edit and not scheme_file.startswith(TEMP_PATH))
             ):
                 # Create temp folder
                 zipped_themes = join(sublime.packages_path(), "User", TEMP_FOLDER)
@@ -95,14 +124,16 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
 
                 # Load unarchived theme
                 settings.set(SCHEME, "%s/%s" % (TEMP_PATH, basename(scheme_file)))
-        elif not new_theme:
+            elif action == "select":
+                settings.set(SCHEME, scheme_file)
+        elif action != "new" and action != "select":
             file_select = True
 
         # Call the editor with the theme file
         subprocess.Popen(
             [THEME_EDITOR] +
             (["-d"] if bool(p_settings.get("debug", False)) else []) +
-            (["-n"] if new_theme else []) +
+            (["-n"] if action == "new" else []) +
             (["-s"] if file_select else []) +
             (["-L"] if bool(p_settings.get("live_edit", True)) else []) +
             ["-l", join(sublime.packages_path(), "User")] +
@@ -140,8 +171,97 @@ def check_version(editor, p_settings, platform):
         sublime.error_message(MSGS["access"])
 
 
-def parse_binary_path(pth):
-    return normpath(pth).replace("${Packages}", sublime.packages_path())
+class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand):
+    theme_files = {"pattern": "*.tmTheme", "regex": False}
+
+    def find_files(self, files, pattern, settings, regex):
+        for f in files:
+            if regex:
+                if re.match(pattern, f[0], re.IGNORECASE) != None:
+                    settings.append([f[0].replace(self.packages, "").lstrip("\\").lstrip("/"), f[1]])
+            else:
+                if fnmatch(f[0], pattern):
+                    settings.append([f[0].replace(self.packages, "").lstrip("\\").lstrip("/"), f[1]])
+
+    def walk(self, settings, plugin, pattern, regex=False):
+        for base, dirs, files in walk(plugin):
+            files = [(join(base, f), "Packages") for f in files]
+            self.find_files(files, pattern, settings, regex)
+
+    def load_scheme(self, value, settings):
+        if value > -1:
+            scheme_file = "Packages/" + settings[value][0].replace("\\", "/")
+            if self.edit:
+                sublime.run_command(
+                    "color_scheme_editor",
+                    {"action": "select", "select_theme": scheme_file}
+                )
+            else:
+                preferences = sublime.load_settings(PREFERENCES)
+                preferences.set(SCHEME, scheme_file)
+
+    def get_zip_packages(self, file_path, package_type):
+        for item in listdir(file_path):
+            if fnmatch(item, "*.sublime-package"):
+                yield (join(file_path, item), package_type)
+
+    def search_zipped_files(self, unpacked):
+        installed = []
+        default = []
+        st_packages = sublime_package_paths()
+        unpacked_path = sublime_format_path(self.packages)
+        default_path = sublime_format_path(st_packages[1])
+        installed_path = sublime_format_path(st_packages[0])
+        for p in self.get_zip_packages(st_packages[0], "Installed"):
+            name = strip_package_ext(sublime_format_path(p[0]).replace(installed_path, ""))
+            keep = True
+            for i in unpacked:
+                if name == sublime_format_path(i).replace(unpacked_path, ""):
+                    keep = False
+                    break
+            if keep:
+                installed.append(p)
+
+        for p in self.get_zip_packages(st_packages[1], "Default"):
+            name = strip_package_ext(sublime_format_path(p[0]).replace(default_path, ""))
+            keep = True
+            for i in installed:
+                if name == strip_package_ext(sublime_format_path(i[0]).replace(installed_path, "")):
+                    keep = False
+                    break
+            for i in unpacked:
+                if name == strip_package_ext(sublime_format_path(i[0]).replace(unpacked_path, "")):
+                    keep = False
+                    break
+            if keep:
+                default.append(p)
+        return sorted(default) + sorted(installed)
+
+    def walk_zip(self, settings, plugin, pattern, regex):
+        with zipfile.ZipFile(plugin[0], 'r') as z:
+            zipped = [(join(strip_package_ext(basename(plugin[0])), normpath(fn)), plugin[1]) for fn in sorted(z.namelist())]
+            self.find_files(zipped, pattern, settings, regex)
+
+    def run(self, edit=True):
+        self.edit = edit
+        pattern = self.theme_files["pattern"]
+        regex = bool(self.theme_files["regex"])
+        self.packages = normpath(sublime.packages_path())
+        settings = []
+        plugins = sorted([join(self.packages, item) for item in listdir(self.packages) if isdir(join(self.packages, item))])
+        for plugin in plugins:
+            self.walk(settings, plugin, pattern.strip(), regex)
+
+        self.zipped_idx = len(settings)
+
+        zipped_plugins = self.search_zipped_files(plugins)
+        for plugin in zipped_plugins:
+            self.walk_zip(settings, plugin, pattern.strip(), regex)
+
+        self.window.show_quick_panel(
+            settings,
+            lambda x: self.load_scheme(x, settings=settings)
+        )
 
 
 def plugin_loaded():

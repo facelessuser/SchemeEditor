@@ -2,34 +2,37 @@
     // Open the current theme in the editor
     // (copy to seperate location first and set to current theme)
     {
-        "caption": "Color Scheme Editor",
+        "caption": "Color Scheme: Editor (file picker)",
         "command": "color_scheme_editor"
     },
     // Creates a new theme in the editor
     // (copy to seperate location first and set to current theme)
     {
-        "caption": "Color Scheme Editor (new theme)",
+        "caption": "Color Scheme: Editor (new theme)",
         "command": "color_scheme_editor",
-        "args": { "new_theme": true }
+        "args": { "action": "new" }
     },
     // Open the current theme in the editor
     // (copy to seperate location first and set to current theme)
     {
-        "caption": "Color Scheme Editor (current theme)",
+        "caption": "Color Scheme: Editor (current theme)",
         "command": "color_scheme_editor",
-        "args": { "current_theme": true }
+        "args": { "action": "current" }
     },
-    // Open the current theme in the editor
-    // (directly edit the file without copying; unless
-    // the theme is inside a sublime-package archive)
+    // Search plugins for themes and choose one to edit
     {
-        "caption": "Color Scheme Editor (current theme | direct write)",
-        "command": "color_scheme_editor",
-        "args": { "no_direct_edit": false, "current_theme": true }
+        "caption": "Color Scheme: Editor (pick installed theme)",
+        "command": "get_color_scheme_files"
+    },
+    // Search plugins for themes and choose one to use
+    {
+        "caption": "Color Scheme: Set (pick installed theme)",
+        "command": "get_color_scheme_files",
+        "args": {"edit": false}
     },
     // Open log file in Sublime Text
     {
-        "caption": "Color Scheme Editor: Get Log",
+        "caption": "Color Scheme: Get Editor Log",
         "command": "color_scheme_editor_log"
     }
 ]
