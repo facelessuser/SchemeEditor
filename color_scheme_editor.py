@@ -1,7 +1,9 @@
 import sublime
 import sublime_plugin
 from os.path import join, exists, basename, normpath, dirname, isdir, splitext
-from os import listdir, walk, makedirs
+from os import listdir, walk, makedirs, chmod
+from os import stat as osstat
+import stat
 from fnmatch import fnmatch
 import re
 import zipfile
@@ -73,6 +75,12 @@ def parse_binary_path(pth):
     return normpath(pth).replace("${Packages}", sublime.packages_path())
 
 
+def nix_check_permissions(bin):
+    st = osstat(bin)
+    if not bool(st.st_mode & stat.S_IEXEC):
+        chmod(bin, st.st_mode | stat.S_IEXEC)
+
+
 class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
     def run(self):
         log = join(sublime.packages_path(), "User", "subclrschm.log")
@@ -128,6 +136,9 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
                 settings.set(SCHEME, scheme_file)
         elif action != "new" and action != "select":
             file_select = True
+
+        if sublime.platform() == "linux":
+            nix_check_permissions(THEME_EDITOR)
 
         # Call the editor with the theme file
         subprocess.Popen(
@@ -277,7 +288,8 @@ def plugin_loaded():
         elif platform == "windows":
             THEME_EDITOR = parse_binary_path(p_settings.get("windows"))
         elif platform == "linux":
-            sublime.error_message(MSGS["linux"])
+            THEME_EDITOR = parse_binary_path(p_settings.get("linux"))
+            nix_check_permissions(THEME_EDITOR)
     except:
         pass
 
