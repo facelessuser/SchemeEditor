@@ -5,10 +5,13 @@ Color Scheme Editor for Sublime Text
 
 # Supported Platforms
 ## Windows
-<img src="http://dl.dropbox.com/u/342698/ColorSchemeEditor/Screenshot%20-%204_1_2013%20%2C%202_28_30%20PM.png" border="0"/>
+<img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_WIN.png" border="0"/>
 
 ## OSX
-<img src="http://dl.dropbox.com/u/342698/ColorSchemeEditor/Screen%20Shot%202013-04-01%20at%203.34.20%20PM.png" border="0"/>
+<img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_OSX.png" border="0"/>
+
+## Ubuntu 12.10 32 Bit
+<img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_NIX.png" border="0"/>
 
 # License
 
