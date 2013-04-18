@@ -34,5 +34,10 @@
     {
         "caption": "Color Scheme: Get Editor Log",
         "command": "color_scheme_editor_log"
+    },
+    // Clear Temp Folder
+    {
+        "caption": "Color Scheme: Clear Temp Folder",
+        "command": "color_scheme_clear_temp"
     }
 ]
