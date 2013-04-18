@@ -1,7 +1,7 @@
 import sublime
 import sublime_plugin
-from os.path import join, exists, basename, normpath, dirname, isdir, splitext
-from os import listdir, walk, makedirs, chmod
+from os.path import join, exists, basename, normpath, dirname, isdir, splitext, isfile
+from os import listdir, walk, makedirs, chmod, unlink
 from os import stat as osstat
 import stat
 from fnmatch import fnmatch
@@ -12,15 +12,20 @@ import re
 import json
 import codecs
 from plistlib import writePlistToBytes
+import urllib.request
+import shutil
 
 MIN_EXPECTED_VERSION = "0.0.5"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
+DOWNLOAD_FOLDER = "ColorSchemeDownloads"
 TEMP_PATH = "Packages/User/%s" % TEMP_FOLDER
+DOWNLOAD_PATH = "Packages/User/%s" % DOWNLOAD_FOLDER
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
+THEMES = "theme-list.sublime-settings"
 MIN_VERSION = {
     "osx": MIN_EXPECTED_VERSION,
     "windows": MIN_EXPECTED_VERSION,
@@ -81,11 +86,34 @@ def nix_check_permissions(bin):
         chmod(bin, st.st_mode | stat.S_IEXEC)
 
 
-class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
-    def run(self):
-        log = join(sublime.packages_path(), "User", "subclrschm.log")
-        if exists(log):
-            self.window.open_file(log)
+def version_compare(version, min_version):
+    cur_v = [int(x) for x in version.split('.')]
+    min_v = [int(x) for x in min_version.split('.')]
+
+    return not (
+        cur_v[0] < min_v[0] or
+        (cur_v[0] == min_v[0] and cur_v[1] < min_v[1]) or
+        (cur_v[0] == min_v[0] and cur_v[1] == min_v[1] and cur_v[2] < min_v[2])
+    )
+
+
+def check_version(editor, p_settings, platform):
+    p = subprocess.Popen([editor, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out = p.communicate()
+    m = re.match(r"subclrschm ([\d]*\.[\d]*\.[\d])*", out[1].decode('utf-8'))
+    if m is not None:
+        version = m.group(1)
+        # True if versions are okay
+        if not version_compare(version, MIN_VERSION[platform]):
+            ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
+            ignore_versions = str(p_settings.get("ignore_version_update", ""))
+            if not ignore_key == ignore_versions:
+                if sublime.ok_cancel_dialog(MSGS["version"] % (version, MIN_VERSION[platform]), "Ignore"):
+                    ignore_versions = ignore_key
+                    p_settings.set("ignore_version_update", ignore_versions)
+                    sublime.save_settings(PLUGIN_SETTINGS)
+    else:
+        sublime.error_message(MSGS["access"])
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
@@ -152,34 +180,80 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         )
 
 
-def version_compare(version, min_version):
-    cur_v = [int(x) for x in version.split('.')]
-    min_v = [int(x) for x in min_version.split('.')]
+class RemoveColorSchemeUrlCommand(sublime_plugin.WindowCommand):
+    def remove_theme(self, value):
+        if value >= 0:
+            try:
+                shutil.rmtree(self.path[value])
+            except:
+                sublime.error_message("There was a problem removing %s!" % self.themes[value])
 
-    return not (
-        cur_v[0] < min_v[0] or
-        (cur_v[0] == min_v[0] and cur_v[1] < min_v[1]) or
-        (cur_v[0] == min_v[0] and cur_v[1] == min_v[1] and cur_v[2] < min_v[2])
-    )
+    def hastheme(self, folder):
+        has = False
+        for f in listdir(folder):
+            if isfile(join(folder, f)) and f.lower().endswith(".tmtheme"):
+                has = True
+                break
+        return has
+
+    def run(self):
+        self.themes = []
+        self.path = []
+        download_themes = join(sublime.packages_path(), "User", DOWNLOAD_FOLDER)
+        for f in listdir(download_themes):
+            full_path = join(download_themes, f)
+            if isdir(full_path) and self.hastheme(full_path):
+                self.themes.append(f)
+                self.path.append(full_path)
+
+        self.window.show_quick_panel(
+            self.themes,
+            self.remove_theme
+        )
 
 
-def check_version(editor, p_settings, platform):
-    p = subprocess.Popen([editor, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out = p.communicate()
-    m = re.match(r"subclrschm ([\d]*\.[\d]*\.[\d])*", out[1].decode('utf-8'))
-    if m is not None:
-        version = m.group(1)
-        # True if versions are okay
-        if not version_compare(version, MIN_VERSION[platform]):
-            ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
-            ignore_versions = str(p_settings.get("ignore_version_update", ""))
-            if not ignore_key == ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["version"] % (version, MIN_VERSION[platform]), "Ignore"):
-                    ignore_versions = ignore_key
-                    p_settings.set("ignore_version_update", ignore_versions)
-                    sublime.save_settings(PLUGIN_SETTINGS)
-    else:
-        sublime.error_message(MSGS["access"])
+class GetColorSchemeUrlCommand(sublime_plugin.WindowCommand):
+    def get_theme(self, value):
+        if value >= 0:
+            name = self.themes[value][0]
+            # Create temp folder
+            download_themes = join(sublime.packages_path(), "User", DOWNLOAD_FOLDER)
+            if not exists(download_themes):
+                makedirs(download_themes)
+
+            download_folder = join(download_themes, name)
+
+            if not exists(download_folder):
+                makedirs(download_folder)
+
+            url = self.themes[value][1]
+            try:
+                urllib.request.urlretrieve(url, join(download_folder, urllib.request.url2pathname(basename(url))))
+                scheme_file = "Packages/User/%s/%s/%s" % (DOWNLOAD_FOLDER, name, urllib.request.url2pathname(basename(url)))
+                if self.edit:
+                    sublime.run_command(
+                        "color_scheme_editor",
+                        {"action": "select", "select_theme": scheme_file}
+                    )
+                else:
+                    preferences = sublime.load_settings(PREFERENCES)
+                    preferences.set(SCHEME, scheme_file)
+            except:
+                sublime.error_message("Could not download %s" % name)
+
+    def run(self, edit=True):
+        self.themes = []
+        self.edit = edit
+        settings = sublime.load_settings(THEMES)
+        for t in settings.get("default", []) + settings.get("themes", []):
+            self.themes.append([t["name"], t["url"]])
+
+        self.themes.sort(key=lambda l: l[0])
+
+        self.window.show_quick_panel(
+            self.themes,
+            self.get_theme
+        )
 
 
 class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand):
@@ -273,6 +347,35 @@ class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand):
             settings,
             lambda x: self.load_scheme(x, settings=settings)
         )
+
+
+class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        log = join(sublime.packages_path(), "User", "subclrschm.log")
+        if exists(log):
+            self.window.open_file(log)
+
+
+class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
+    def run(self):
+        current_scheme = sublime.load_settings(PREFERENCES).get(SCHEME)
+        using_temp = current_scheme.startswith(TEMP_PATH)
+        folder = join(sublime.packages_path(), "User", TEMP_FOLDER)
+        for f in listdir(folder):
+            pth = join(folder, f)
+            try:
+                if (
+                    isfile(pth) and
+                    (
+                        not using_temp or (
+                            basename(pth) != basename(current_scheme) and
+                            basename(pth) != basename(current_scheme) + ".JSON"
+                        )
+                    )
+                ):
+                    unlink(pth)
+            except:
+                print("ColorSchemeEditor: Could not remove %s!" % pth)
 
 
 def plugin_loaded():
