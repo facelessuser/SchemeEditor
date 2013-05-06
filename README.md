@@ -3,6 +3,8 @@ ColorSchemeEditor
 
 Color Scheme Editor for Sublime Text
 
+See http://www.sublimetext.com/forum/viewtopic.php?f=5&t=11819 for more information and downloadlinks for binaries. Source code for the GUI in "GUI_Source" branch.
+
 # Supported Platforms
 ## Windows
 <img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_WIN.png" border="0"/>
