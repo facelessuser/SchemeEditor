@@ -75,7 +75,7 @@ Do you want to update now?
 # ''',
 
     "access": '''Color Scheme Editor:
-subclrschm cannot be accessed.
+There was a problem calling subclrschm.
 ''',
 
     "temp": '''Color Scheme Editor:
@@ -89,6 +89,10 @@ Could not create new theme.
     "download": '''Color Scheme Editor:
 Subclrschm binary has not been downloaded.
 Would you like to download the subclrschm binary now?
+''',
+
+"version": '''Color Scheme Editor:
+There was a problem comparing versions.
 '''
 }
 
@@ -157,7 +161,7 @@ def check_version(editor, p_settings, platform):
                 ignore_versions = str(p_settings.get("ignore_version_update", ""))
                 sublime.save_settings(PLUGIN_SETTINGS)
     else:
-        sublime.error_message(MSGS["access"])
+        sublime.error_message(MSGS["version"])
 
 
 def download_package():
@@ -256,16 +260,19 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
             nix_check_permissions(THEME_EDITOR)
 
         # Call the editor with the theme file
-        subprocess.Popen(
-            [THEME_EDITOR] +
-            (["-d"] if bool(p_settings.get("debug", False)) else []) +
-            (["-n"] if action == "new" else []) +
-            (["-s"] if file_select else []) +
-            (["-L"] if bool(p_settings.get("live_edit", True)) else []) +
-            ["-l", join(sublime.packages_path(), "User")] +
-            # ["--sublime_paths", join(dirname(sublime.executable_path()), 'Packages'), sublime.installed_packages_path(), sublime.packages_path()] +
-            ([actual_scheme_file] if actual_scheme_file is not None and exists(actual_scheme_file) else [])
-        )
+        try:
+            subprocess.Popen(
+                [THEME_EDITOR] +
+                (["-d"] if bool(p_settings.get("debug", False)) else []) +
+                (["-n"] if action == "new" else []) +
+                (["-s"] if file_select else []) +
+                (["-L"] if bool(p_settings.get("live_edit", True)) else []) +
+                ["-l", join(sublime.packages_path(), "User")] +
+                # ["--sublime_paths", join(dirname(sublime.executable_path()), 'Packages'), sublime.installed_packages_path(), sublime.packages_path()] +
+                ([actual_scheme_file] if actual_scheme_file is not None and exists(actual_scheme_file) else [])
+            )
+        except:
+            sublime.error_message(MSGS["access"])
 
 
 class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
