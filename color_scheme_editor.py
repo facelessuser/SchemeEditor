@@ -1,8 +1,8 @@
 import sublime
 import sublime_plugin
-from os.path import join, exists, basename, normpath, dirname, isdir, splitext, isfile
-from os import listdir, walk, makedirs, chmod, unlink
-from os import stat as osstat
+from os.path import join, exists, basename, normpath, dirname, isdir, splitext, isfile, splitdrive, split
+from os import listdir, walk, makedirs, chmod, unlink, curdir, pardir
+from os import stat as osstat, remove
 import stat
 from fnmatch import fnmatch
 import re
@@ -12,23 +12,39 @@ import json
 import codecs
 from plistlib import writePlistToBytes
 from .lib.package_search import PackageSearch, sublime_package_paths
+import shutil
+import tempfile
+import urllib.request as request
+import zipfile
+from .lib.file_strip.json import sanitize_json
+import json
+
 
 MIN_EXPECTED_VERSION = "0.0.5"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
-DOWNLOAD_FOLDER = "ColorSchemeDownloads"
 TEMP_PATH = "Packages/User/%s" % TEMP_FOLDER
-DOWNLOAD_PATH = "Packages/User/%s" % DOWNLOAD_FOLDER
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
 THEMES = "theme-list.sublime-settings"
+
+BINARY_PATH = "${Packages}/User/subclrschm"
+
 MIN_VERSION = {
     "osx": MIN_EXPECTED_VERSION,
     "windows": MIN_EXPECTED_VERSION,
-    "linux": "0.0.0"
+    "linux": MIN_EXPECTED_VERSION
 }
+
+BINARY = {
+    "windows": "subclrschm.exe",
+    "osx": "subclrschm.app/Contents/MacOS/subclrschm",
+    "linux": "subclrschm"
+}
+
+REPO = "https://github.com/facelessuser/subclrschm-bin/archive/%s.zip"
 
 MSGS = {
     "version": '''Color Scheme Editor:
@@ -55,6 +71,11 @@ Could not copy theme file to temp directory.
 
     "new": '''Color Scheme Editor:
 Could not create new theme.
+''',
+
+    "download": '''Color Scheme Editor:
+Subclrschm binary has not been downloaded.
+Would you like to download the subclrschm binary now?
 '''
 }
 
@@ -70,8 +91,8 @@ def sublime_format_path(pth):
     return pth.replace("\\", "/")
 
 
-def parse_binary_path(pth):
-    return normpath(pth).replace("${Packages}", sublime.packages_path())
+def parse_binary_path():
+    return normpath(BINARY_PATH).replace("${Packages}", sublime.packages_path())
 
 
 def nix_check_permissions(bin):
@@ -92,11 +113,16 @@ def version_compare(version, min_version):
 
 
 def check_version(editor, p_settings, platform):
-    p = subprocess.Popen([editor, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out = p.communicate()
-    m = re.match(r"subclrschm ([\d]*\.[\d]*\.[\d])*", out[1].decode('utf-8'))
-    if m is not None:
-        version = m.group(1)
+    version_file = join(parse_binary_path(), "subclrschm-bin-%s" % platform, "version.json")
+    try:
+        with open(version_file, "r") as f:
+            # Allow C style comments and be forgiving of trailing commas
+            content = sanitize_json(f.read(), True)
+        version = json.loads(content).get("version", None)
+    except:
+        version = None
+        pass
+    if version is not None:
         # True if versions are okay
         if not version_compare(version, MIN_VERSION[platform]):
             ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
@@ -110,10 +136,53 @@ def check_version(editor, p_settings, platform):
         sublime.error_message(MSGS["access"])
 
 
+def download_package():
+    downloaded = False
+    binpath = parse_binary_path()
+    osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
+    if exists(binpath):
+        try:
+            if isdir(binpath):
+                if exists(osbinpath):
+                    shutil.rmtree(osbinpath)
+            else:
+                remove(binpath)
+                makedirs(binpath)
+
+        except Exception as e:
+            print(e)
+            sublime.error_message("Failed to download")
+            return downloaded
+    else:
+        makedirs(binpath)
+
+    try:
+        temp = tempfile.mkdtemp(prefix="subclrschm")
+        file_name = join(temp, "subclrschm.zip")
+        with request.urlopen(REPO % sublime.platform()) as response, open(file_name, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+        unzip(file_name, binpath)
+    except Exception as e:
+        print(e)
+        sublime.error_message("Failed to download")
+        return downloaded
+    plugin_loaded()
+    if THEME_EDITOR is not None:
+        downloaded = True
+    return downloaded
+
+
+def unzip(source, dest_dir):
+    with zipfile.ZipFile(source) as z:
+        z.extractall(dest_dir)
+
+
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
     def run(self, action=None, select_theme=None):
         if THEME_EDITOR is None:
-            return
+            if sublime.ok_cancel_dialog(MSGS["download"]):
+                if not download_package():
+                    return
         # Get current color scheme
         p_settings = sublime.load_settings(PLUGIN_SETTINGS)
         settings = sublime.load_settings(PREFERENCES)
@@ -242,21 +311,17 @@ def plugin_loaded():
 
     try:
         # Pick the correct binary for the editor
-        if platform == "osx":
-            THEME_EDITOR = join(parse_binary_path(p_settings.get("osx")), "Contents", "MacOS", "subclrschm")
-        elif platform == "windows":
-            THEME_EDITOR = parse_binary_path(p_settings.get("windows"))
-        elif platform == "linux":
-            THEME_EDITOR = parse_binary_path(p_settings.get("linux"))
-            nix_check_permissions(THEME_EDITOR)
+        THEME_EDITOR = join(parse_binary_path(), "subclrschm-bin-%s" % platform, BINARY[platform])
     except:
         pass
 
     if THEME_EDITOR is None or not exists(THEME_EDITOR):
-        sublime.error_message(MSGS["binary"])
+        # sublime.error_message(MSGS["binary"])
         THEME_EDITOR = None
+    elif platform in ["linux", "osx"]:
+        nix_check_permissions(THEME_EDITOR)
 
-    elif THEME_EDITOR is not None:
+    if THEME_EDITOR is not None:
         check_version(THEME_EDITOR, p_settings, platform)
 
     p_settings.add_on_change('reload', plugin_loaded)

@@ -15,5 +15,6 @@
 
     // Executable paths
     "osx": "${Packages}/User/subclrschm.app",
-    "windows": "${Packages}\\User\\subclrschm.exe"
+    "windows": "${Packages}\\User\\subclrschm.exe",
+    "linux": "${Packages}/user/subclrschm"
 }
