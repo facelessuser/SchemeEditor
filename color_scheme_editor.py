@@ -70,16 +70,12 @@ An new version of subclrschm is avalable (%s).
 Do you want to update now?
 ''',
 
-    "linux": '''Color Scheme Editor:
-Sorry, currently no love for the penguin. Linux support coming in the future.
-''',
+#     "linux": '''Color Scheme Editor:
+# Sorry, currently no love for the penguin. Linux support coming in the future.
+# ''',
 
     "access": '''Color Scheme Editor:
 subclrschm cannot be accessed.
-''',
-
-    "binary": '''Color Scheme Editor:
-Could not find subclrschm (the editor)!
 ''',
 
     "temp": '''Color Scheme Editor:
@@ -209,8 +205,8 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
     def run(self, action=None, select_theme=None):
         if THEME_EDITOR is None:
             if sublime.ok_cancel_dialog(MSGS["download"]):
-                if not download_package():
-                    return
+                sublime.set_timeout(download_package, 100)
+                return
         # Get current color scheme
         p_settings = sublime.load_settings(PLUGIN_SETTINGS)
         settings = sublime.load_settings(PREFERENCES)
@@ -344,12 +340,14 @@ def plugin_loaded():
         pass
 
     if THEME_EDITOR is None or not exists(THEME_EDITOR):
-        # sublime.error_message(MSGS["binary"])
         THEME_EDITOR = None
     elif platform in ["linux", "osx"]:
         nix_check_permissions(THEME_EDITOR)
 
     if THEME_EDITOR is not None:
         check_version(THEME_EDITOR, p_settings, platform)
+    else:
+        if sublime.ok_cancel_dialog(MSGS["download"]):
+            sublime.set_timeout(download_package, 100)
 
     p_settings.add_on_change('reload', plugin_loaded)
