@@ -21,6 +21,7 @@ import json
 
 
 MIN_EXPECTED_VERSION = "0.0.5"
+MAX_EXPECTED_VERSION = "0.0.8"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
@@ -38,6 +39,12 @@ MIN_VERSION = {
     "linux": MIN_EXPECTED_VERSION
 }
 
+MAX_VERSION = {
+    "osx": MAX_EXPECTED_VERSION,
+    "windows": MAX_EXPECTED_VERSION,
+    "linux": MAX_EXPECTED_VERSION
+}
+
 BINARY = {
     "windows": "subclrschm.exe",
     "osx": "subclrschm.app/Contents/MacOS/subclrschm",
@@ -47,10 +54,20 @@ BINARY = {
 REPO = "https://github.com/facelessuser/subclrschm-bin/archive/%s.zip"
 
 MSGS = {
-    "version": '''Color Scheme Editor:
+    "ignore_critical": '''Color Scheme Editor:
 You are currently running version %s of subclrschm, %s is the minimum expected version.  Some features may not work. Please consider updating the editor for the best possible experience.
 
 Do you want to ignore this update?
+''',
+
+    "ignore": '''Color Scheme Editor:
+Do you want to ignore this update?
+''',
+
+    "upgrade": '''Color Scheme Editor:
+An new version of subclrschm is avalable (%s).
+
+Do you want to update now?
 ''',
 
     "linux": '''Color Scheme Editor:
@@ -121,17 +138,28 @@ def check_version(editor, p_settings, platform):
         version = json.loads(content).get("version", None)
     except:
         version = None
-        pass
+
     if version is not None:
         # True if versions are okay
         if not version_compare(version, MIN_VERSION[platform]):
             ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
             ignore_versions = str(p_settings.get("ignore_version_update", ""))
             if not ignore_key == ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["version"] % (version, MIN_VERSION[platform]), "Ignore"):
+                if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
+                    sublime.set_timeout(download_package, 100)
+                    return
+                elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, MIN_VERSION[platform]), "Ignore"):
                     ignore_versions = ignore_key
                     p_settings.set("ignore_version_update", ignore_versions)
                     sublime.save_settings(PLUGIN_SETTINGS)
+        elif not version_compare(version, MAX_VERSION[platform]):
+            if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
+                sublime.set_timeout(download_package, 100)
+                return
+            elif sublime.ok_cancel_dialog(MSGS["ignore_critical"], "Ignore"):
+                ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
+                ignore_versions = str(p_settings.get("ignore_version_update", ""))
+                sublime.save_settings(PLUGIN_SETTINGS)
     else:
         sublime.error_message(MSGS["access"])
 
