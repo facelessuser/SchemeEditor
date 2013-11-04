@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import urllib.request as request
 import zipfile
-from os import remove
+from os import remove, makedirs
 from .file_strip.json import sanitize_json
 import json
 from os.path import join, exists, normpath, isdir
@@ -181,15 +181,14 @@ def get_binary(callback):
             failed = True
             sublime.error_message(MSGS["install_download"])
 
-    if not failed:
-        sublime.set_timeout(callback, 100)
-
     UPDATING = False
+    if not failed:
+        binary_upgraded(callback)
 
 
-def binary_upgraded():
+def binary_upgraded(callback):
     sublime.message_dialog(MSGS["install_success"])
-    init_plugin()
+    sublime.set_timeout(callback, 100)
 
 
 def unzip(source, dest_dir):
