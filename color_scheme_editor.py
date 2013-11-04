@@ -30,6 +30,7 @@ PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
 THEMES = "theme-list.sublime-settings"
+UPDATING = False
 
 BINARY_PATH = "${Packages}/User/subclrschm"
 
@@ -88,11 +89,28 @@ Could not create new theme.
 
     "download": '''Color Scheme Editor:
 Subclrschm binary has not been downloaded.
+
 Would you like to download the subclrschm binary now?
 ''',
 
 "version": '''Color Scheme Editor:
 There was a problem comparing versions.
+''',
+
+    "install_directory": '''Color Scheme Editor:
+Failed trying to create/cleanup folder for subclrschm.  Please make sure subclrschm is not running.
+''',
+
+    "install_download": '''Color Scheme Editor:
+Failed to download and install subclrschm.
+''',
+
+    "install_success": '''Color Scheme Editor:
+subclrschm installed!
+''',
+
+    "install_busy": '''Color Scheme Editor:
+Updater is currently busy attempting an install.
 '''
 }
 
@@ -146,7 +164,7 @@ def check_version(editor, p_settings, platform):
             ignore_versions = str(p_settings.get("ignore_version_update", ""))
             if not ignore_key == ignore_versions:
                 if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
-                    sublime.set_timeout(download_package, 100)
+                    update_package()
                     return
                 elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, MIN_VERSION[platform]), "Ignore"):
                     ignore_versions = ignore_key
@@ -154,7 +172,7 @@ def check_version(editor, p_settings, platform):
                     sublime.save_settings(PLUGIN_SETTINGS)
         elif not version_compare(version, MAX_VERSION[platform]):
             if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
-                sublime.set_timeout(download_package, 100)
+                update_package()
                 return
             elif sublime.ok_cancel_dialog(MSGS["ignore_critical"], "Ignore"):
                 ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
@@ -164,8 +182,17 @@ def check_version(editor, p_settings, platform):
         sublime.error_message(MSGS["version"])
 
 
-def download_package():
-    downloaded = False
+def update_package():
+    if not UPDATING:
+        sublime.set_timeout_async(get_package, 100)
+    else:
+        sublime.error_message(MSGS["install_busy"])
+
+
+def get_package():
+    global UPDATING
+    UPDATING = True
+    failed = False
     binpath = parse_binary_path()
     osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
     if exists(binpath):
@@ -179,25 +206,30 @@ def download_package():
 
         except Exception as e:
             print(e)
-            sublime.error_message("Failed to download")
-            return downloaded
+            failed = True
+            sublime.error_message(MSGS["install_directory"])
     else:
         makedirs(binpath)
 
-    try:
-        temp = tempfile.mkdtemp(prefix="subclrschm")
-        file_name = join(temp, "subclrschm.zip")
-        with request.urlopen(REPO % sublime.platform()) as response, open(file_name, 'wb') as out_file:
-            shutil.copyfileobj(response, out_file)
-        unzip(file_name, binpath)
-    except Exception as e:
-        print(e)
-        sublime.error_message("Failed to download")
-        return downloaded
-    plugin_loaded()
-    if THEME_EDITOR is not None:
-        downloaded = True
-    return downloaded
+    if not failed:
+        try:
+            temp = tempfile.mkdtemp(prefix="subclrschm")
+            file_name = join(temp, "subclrschm.zip")
+            with request.urlopen(REPO % sublime.platform()) as response, open(file_name, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+            unzip(file_name, binpath)
+        except Exception as e:
+            print(e)
+            failed = True
+            sublime.error_message(MSGS["install_download"])
+
+    if not failed:
+        sublime.set_timeout(package_upgraded, 100)
+
+
+def package_upgraded():
+    sublime.message_dialog(MSGS["install_success"])
+    init_plugin()
 
 
 def unzip(source, dest_dir):
@@ -206,33 +238,43 @@ def unzip(source, dest_dir):
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
-    def run(self, action=None, select_theme=None):
-        if THEME_EDITOR is None:
-            if sublime.ok_cancel_dialog(MSGS["download"]):
-                sublime.set_timeout(download_package, 100)
-                return
+    def init_settings(self, action, select_theme):
+        init_okay = True
         # Get current color scheme
-        p_settings = sublime.load_settings(PLUGIN_SETTINGS)
-        settings = sublime.load_settings(PREFERENCES)
-        direct_edit = bool(p_settings.get("direct_edit", False))
-        scheme_file = settings.get(SCHEME, None)
-        actual_scheme_file = None
-        file_select = False
+        self.p_settings = sublime.load_settings(PLUGIN_SETTINGS)
+        self.settings = sublime.load_settings(PREFERENCES)
+        self.direct_edit = bool(self.p_settings.get("direct_edit", False))
+        self.scheme_file = self.settings.get(SCHEME, None)
+        self.actual_scheme_file = None
+        self.file_select = False
 
         if action == "select":
             if select_theme is not None:
-                scheme_file = select_theme
+                self.scheme_file = select_theme
             else:
-                return
+                init_okay = False
+        return init_okay
 
-        if action != "new" and scheme_file is not None and (action == "current" or action == "select"):
+    def check_binary(self):
+        safe = True
+        if THEME_EDITOR is None or not exists(THEME_EDITOR):
+            if sublime.ok_cancel_dialog(MSGS["download"]):
+                update_package()
+                safe = False
+        if safe:
+            if sublime.platform() in ["linux", "osx"]:
+                nix_check_permissions(THEME_EDITOR)
+        return safe
+
+    def prepare_theme(self, action):
+        if action != "new" and self.scheme_file is not None and (action == "current" or action == "select"):
             # Get real path
-            actual_scheme_file = join(dirname(sublime.packages_path()), normpath(scheme_file))
+            self.actual_scheme_file = join(dirname(sublime.packages_path()), normpath(self.scheme_file))
 
             # If scheme cannot be found, it is most likely in an archived package
             if (
-                not exists(actual_scheme_file) or
-                (not direct_edit and not scheme_file.startswith(TEMP_PATH))
+                not exists(self.actual_scheme_file) or
+                (not self.direct_edit and not self.scheme_file.startswith(TEMP_PATH))
             ):
                 # Create temp folder
                 zipped_themes = join(sublime.packages_path(), "User", TEMP_FOLDER)
@@ -240,36 +282,48 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
                     makedirs(zipped_themes)
 
                 # Read theme file into memory and write out to the temp directory
-                text = sublime.load_binary_resource(scheme_file)
-                actual_scheme_file = join(zipped_themes, basename(scheme_file))
+                text = sublime.load_binary_resource(self.scheme_file)
+                self.actual_scheme_file = join(zipped_themes, basename(self.scheme_file))
                 try:
-                    with open(actual_scheme_file, "wb") as f:
+                    with open(self.actual_scheme_file, "wb") as f:
                         f.write(text)
                 except:
                     sublime.error_message(MSGS["temp"])
                     return
 
                 # Load unarchived theme
-                settings.set(SCHEME, "%s/%s" % (TEMP_PATH, basename(scheme_file)))
+                self.settings.set(SCHEME, "%s/%s" % (TEMP_PATH, basename(self.scheme_file)))
             elif action == "select":
-                settings.set(SCHEME, scheme_file)
+                self.settings.set(SCHEME, self.scheme_file)
         elif action != "new" and action != "select":
-            file_select = True
+            self.file_select = True
 
-        if sublime.platform() == "linux":
-            nix_check_permissions(THEME_EDITOR)
+    def run(self, action=None, select_theme=None):
+
+        # Check if the binary is available
+        if not self.check_binary():
+            return
+
+        # Init settings.  Bail if returned an issue
+        if not self.init_settings(action, select_theme):
+            return
+
+        # Prepare the theme to be edited
+        # Copy to a temp location if desired before editing
+        self.prepare_theme(action)
+
 
         # Call the editor with the theme file
         try:
             subprocess.Popen(
                 [THEME_EDITOR] +
-                (["-d"] if bool(p_settings.get("debug", False)) else []) +
+                (["-d"] if bool(self.p_settings.get("debug", False)) else []) +
                 (["-n"] if action == "new" else []) +
-                (["-s"] if file_select else []) +
-                (["-L"] if bool(p_settings.get("live_edit", True)) else []) +
+                (["-s"] if self.file_select else []) +
+                (["-L"] if bool(self.p_settings.get("live_edit", True)) else []) +
                 ["-l", join(sublime.packages_path(), "User")] +
                 # ["--sublime_paths", join(dirname(sublime.executable_path()), 'Packages'), sublime.installed_packages_path(), sublime.packages_path()] +
-                ([actual_scheme_file] if actual_scheme_file is not None and exists(actual_scheme_file) else [])
+                ([self.actual_scheme_file] if self.actual_scheme_file is not None and exists(self.actual_scheme_file) else [])
             )
         except:
             sublime.error_message(MSGS["access"])
@@ -334,7 +388,7 @@ class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
                 print("ColorSchemeEditor: Could not remove %s!" % pth)
 
 
-def plugin_loaded():
+def init_plugin():
     global THEME_EDITOR
     platform = sublime.platform()
     p_settings = sublime.load_settings(PLUGIN_SETTINGS)
@@ -355,6 +409,10 @@ def plugin_loaded():
         check_version(THEME_EDITOR, p_settings, platform)
     else:
         if sublime.ok_cancel_dialog(MSGS["download"]):
-            sublime.set_timeout(download_package, 100)
+            update_package()
 
-    p_settings.add_on_change('reload', plugin_loaded)
+    p_settings.add_on_change('reload', init_plugin)
+
+
+def plugin_loaded():
+    init_plugin()
