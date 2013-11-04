@@ -1,27 +1,17 @@
 import sublime
 import sublime_plugin
-from os.path import join, exists, basename, normpath, dirname, isdir, splitext, isfile, splitdrive, split
-from os import listdir, walk, makedirs, chmod, unlink, curdir, pardir
-from os import stat as osstat, remove
+from os.path import join, exists, basename, normpath, dirname, isfile
+from os import listdir, walk, makedirs, chmod, unlink
+from os import stat as osstat
 import stat
 from fnmatch import fnmatch
-import re
 import subprocess
-import re
-import json
 import codecs
 from plistlib import writePlistToBytes
 from .lib.package_search import PackageSearch, sublime_package_paths
-import shutil
-import tempfile
-import urllib.request as request
-import zipfile
-from .lib.file_strip.json import sanitize_json
-import json
+from .lib.binary_manager import update_binary, check_version, get_binary_location
 
 
-MIN_EXPECTED_VERSION = "0.0.5"
-MAX_EXPECTED_VERSION = "0.0.8"
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
@@ -30,51 +20,9 @@ PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
 THEMES = "theme-list.sublime-settings"
-UPDATING = False
 
-BINARY_PATH = "${Packages}/User/subclrschm"
-
-MIN_VERSION = {
-    "osx": MIN_EXPECTED_VERSION,
-    "windows": MIN_EXPECTED_VERSION,
-    "linux": MIN_EXPECTED_VERSION
-}
-
-MAX_VERSION = {
-    "osx": MAX_EXPECTED_VERSION,
-    "windows": MAX_EXPECTED_VERSION,
-    "linux": MAX_EXPECTED_VERSION
-}
-
-BINARY = {
-    "windows": "subclrschm.exe",
-    "osx": "subclrschm.app/Contents/MacOS/subclrschm",
-    "linux": "subclrschm"
-}
-
-REPO = "https://github.com/facelessuser/subclrschm-bin/archive/%s.zip"
 
 MSGS = {
-    "ignore_critical": '''Color Scheme Editor:
-You are currently running version %s of subclrschm, %s is the minimum expected version.  Some features may not work. Please consider updating the editor for the best possible experience.
-
-Do you want to ignore this update?
-''',
-
-    "ignore": '''Color Scheme Editor:
-Do you want to ignore this update?
-''',
-
-    "upgrade": '''Color Scheme Editor:
-An new version of subclrschm is avalable (%s).
-
-Do you want to update now?
-''',
-
-#     "linux": '''Color Scheme Editor:
-# Sorry, currently no love for the penguin. Linux support coming in the future.
-# ''',
-
     "access": '''Color Scheme Editor:
 There was a problem calling subclrschm.
 ''',
@@ -91,150 +39,14 @@ Could not create new theme.
 Subclrschm binary has not been downloaded.
 
 Would you like to download the subclrschm binary now?
-''',
-
-"version": '''Color Scheme Editor:
-There was a problem comparing versions.
-''',
-
-    "install_directory": '''Color Scheme Editor:
-Failed trying to create/cleanup folder for subclrschm.  Please make sure subclrschm is not running.
-''',
-
-    "install_download": '''Color Scheme Editor:
-Failed to download and install subclrschm.
-''',
-
-    "install_success": '''Color Scheme Editor:
-subclrschm installed!
-''',
-
-    "install_busy": '''Color Scheme Editor:
-Updater is currently busy attempting an install.
 '''
 }
-
-
-def strip_package_ext(pth):
-    return pth[:-16] if pth.lower().endswith(".sublime-package") else pth
-
-
-def sublime_format_path(pth):
-    m = re.match(r"^([A-Za-z]{1}):(?:/|\\)(.*)", pth)
-    if sublime.platform() == "windows" and m != None:
-        pth = m.group(1) + "/" + m.group(2)
-    return pth.replace("\\", "/")
-
-
-def parse_binary_path():
-    return normpath(BINARY_PATH).replace("${Packages}", sublime.packages_path())
 
 
 def nix_check_permissions(bin):
     st = osstat(bin)
     if not bool(st.st_mode & stat.S_IEXEC):
         chmod(bin, st.st_mode | stat.S_IEXEC)
-
-
-def version_compare(version, min_version):
-    cur_v = [int(x) for x in version.split('.')]
-    min_v = [int(x) for x in min_version.split('.')]
-
-    return not (
-        cur_v[0] < min_v[0] or
-        (cur_v[0] == min_v[0] and cur_v[1] < min_v[1]) or
-        (cur_v[0] == min_v[0] and cur_v[1] == min_v[1] and cur_v[2] < min_v[2])
-    )
-
-
-def check_version(editor, p_settings, platform):
-    version_file = join(parse_binary_path(), "subclrschm-bin-%s" % platform, "version.json")
-    try:
-        with open(version_file, "r") as f:
-            # Allow C style comments and be forgiving of trailing commas
-            content = sanitize_json(f.read(), True)
-        version = json.loads(content).get("version", None)
-    except:
-        version = None
-
-    if version is not None:
-        # True if versions are okay
-        if not version_compare(version, MIN_VERSION[platform]):
-            ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
-            ignore_versions = str(p_settings.get("ignore_version_update", ""))
-            if not ignore_key == ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
-                    update_package()
-                    return
-                elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, MIN_VERSION[platform]), "Ignore"):
-                    ignore_versions = ignore_key
-                    p_settings.set("ignore_version_update", ignore_versions)
-                    sublime.save_settings(PLUGIN_SETTINGS)
-        elif not version_compare(version, MAX_VERSION[platform]):
-            if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
-                update_package()
-                return
-            elif sublime.ok_cancel_dialog(MSGS["ignore_critical"], "Ignore"):
-                ignore_key = "%s:%s" % (version, MIN_VERSION[platform])
-                ignore_versions = str(p_settings.get("ignore_version_update", ""))
-                sublime.save_settings(PLUGIN_SETTINGS)
-    else:
-        sublime.error_message(MSGS["version"])
-
-
-def update_package():
-    if not UPDATING:
-        sublime.set_timeout_async(get_package, 100)
-    else:
-        sublime.error_message(MSGS["install_busy"])
-
-
-def get_package():
-    global UPDATING
-    UPDATING = True
-    failed = False
-    binpath = parse_binary_path()
-    osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
-    if exists(binpath):
-        try:
-            if isdir(binpath):
-                if exists(osbinpath):
-                    shutil.rmtree(osbinpath)
-            else:
-                remove(binpath)
-                makedirs(binpath)
-
-        except Exception as e:
-            print(e)
-            failed = True
-            sublime.error_message(MSGS["install_directory"])
-    else:
-        makedirs(binpath)
-
-    if not failed:
-        try:
-            temp = tempfile.mkdtemp(prefix="subclrschm")
-            file_name = join(temp, "subclrschm.zip")
-            with request.urlopen(REPO % sublime.platform()) as response, open(file_name, 'wb') as out_file:
-                shutil.copyfileobj(response, out_file)
-            unzip(file_name, binpath)
-        except Exception as e:
-            print(e)
-            failed = True
-            sublime.error_message(MSGS["install_download"])
-
-    if not failed:
-        sublime.set_timeout(package_upgraded, 100)
-
-
-def package_upgraded():
-    sublime.message_dialog(MSGS["install_success"])
-    init_plugin()
-
-
-def unzip(source, dest_dir):
-    with zipfile.ZipFile(source) as z:
-        z.extractall(dest_dir)
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
@@ -259,7 +71,7 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         safe = True
         if THEME_EDITOR is None or not exists(THEME_EDITOR):
             if sublime.ok_cancel_dialog(MSGS["download"]):
-                update_package()
+                update_binary(init_plugin)
                 safe = False
         if safe:
             if sublime.platform() in ["linux", "osx"]:
@@ -394,11 +206,8 @@ def init_plugin():
     p_settings = sublime.load_settings(PLUGIN_SETTINGS)
     p_settings.clear_on_change('reload')
 
-    try:
-        # Pick the correct binary for the editor
-        THEME_EDITOR = join(parse_binary_path(), "subclrschm-bin-%s" % platform, BINARY[platform])
-    except:
-        pass
+    # Pick the correct binary for the editor
+    THEME_EDITOR = get_binary_location()
 
     if THEME_EDITOR is None or not exists(THEME_EDITOR):
         THEME_EDITOR = None
@@ -406,10 +215,10 @@ def init_plugin():
         nix_check_permissions(THEME_EDITOR)
 
     if THEME_EDITOR is not None:
-        check_version(THEME_EDITOR, p_settings, platform)
+        check_version(THEME_EDITOR, p_settings, platform, init_plugin)
     else:
         if sublime.ok_cancel_dialog(MSGS["download"]):
-            update_package()
+            update_binary(init_plugin)
 
     p_settings.add_on_change('reload', init_plugin)
 
