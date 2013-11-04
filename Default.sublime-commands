@@ -39,5 +39,10 @@
     {
         "caption": "Color Scheme: Clear Temp Folder",
         "command": "color_scheme_clear_temp"
+    },
+    // Check for updates
+    {
+        "caption": "Color Scheme: Check for Editor Updates",
+        "command": "color_scheme_editor_upgrade"
     }
 ]

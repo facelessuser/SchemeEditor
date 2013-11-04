@@ -39,6 +39,10 @@ Could not create new theme.
 Subclrschm binary has not been downloaded.
 
 Would you like to download the subclrschm binary now?
+''',
+
+    "no_updates": '''Color Scheme Editor:
+No updates available at this time.
 '''
 }
 
@@ -200,6 +204,16 @@ class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
                 print("ColorSchemeEditor: Could not remove %s!" % pth)
 
 
+class ColorSchemeEditorUpgradeCommand(sublime_plugin.ApplicationCommand):
+    def run(self):
+        if THEME_EDITOR is None or not exists(THEME_EDITOR):
+            if sublime.ok_cancel_dialog(MSGS["download"]):
+                update_binary(init_plugin)
+        else:
+            if not check_version(THEME_EDITOR, sublime.load_settings(PLUGIN_SETTINGS), init_plugin):
+                sublime.message_dialog(MSGS["no_updates"])
+
+
 def init_plugin():
     global THEME_EDITOR
     platform = sublime.platform()
@@ -215,7 +229,7 @@ def init_plugin():
         nix_check_permissions(THEME_EDITOR)
 
     if THEME_EDITOR is not None:
-        check_version(THEME_EDITOR, p_settings, platform, init_plugin)
+        check_version(THEME_EDITOR, p_settings, init_plugin)
     else:
         if sublime.ok_cancel_dialog(MSGS["download"]):
             update_binary(init_plugin)

@@ -91,7 +91,9 @@ def version_compare(version, min_version):
     )
 
 
-def check_version(editor, p_settings, platform, upgrade_callback):
+def check_version(editor, p_settings, upgrade_callback):
+    update_available = False
+    platform = sublime.platform()
     version_file = join(parse_binary_path(), "subclrschm-bin-%s" % platform, "version.json")
     try:
         with open(version_file, "r") as f:
@@ -109,19 +111,20 @@ def check_version(editor, p_settings, platform, upgrade_callback):
             if not ignore_key == ignore_versions:
                 if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
                     update_binary(upgrade_callback)
-                    return
+                    update_available = True
                 elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, MIN_VERSION[platform]), "Ignore"):
                     p_settings.set("ignore_version_update", ignore_key)
                     sublime.save_settings(PLUGIN_SETTINGS)
         elif not version_compare(version, MAX_VERSION[platform]):
             if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
                 update_binary(upgrade_callback)
-                return
+                update_available = True
             elif sublime.ok_cancel_dialog(MSGS["ignore_critical"], "Ignore"):
                 p_settings.set("ignore_version_update", ignore_key)
                 sublime.save_settings(PLUGIN_SETTINGS)
     else:
         sublime.error_message(MSGS["version"])
+    return update_available
 
 
 def update_binary(callback):
