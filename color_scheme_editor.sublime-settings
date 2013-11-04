@@ -11,10 +11,5 @@
     // If direct edit is enabled, the file will be edited directly
     // except in cases where the theme file is inside an sublime-settings
     // archive
-    "direct_edit": false,
-
-    // Executable paths
-    "osx": "${Packages}/User/subclrschm.app",
-    "windows": "${Packages}\\User\\subclrschm.exe",
-    "linux": "${Packages}/user/subclrschm"
+    "direct_edit": false
 }
