@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 import sublime
 import shutil
 import tempfile
-import urllib.request as request
 import zipfile
 from os import remove, makedirs
 from .file_strip.json import sanitize_json
@@ -10,6 +10,11 @@ import json
 from os.path import join, exists, normpath, isdir
 import threading
 
+ST3 = int(sublime.version()) >= 3000
+if ST3:
+    import urllib.request
+else:
+    import urllib2
 LOCK = threading.Lock()
 UPDATING = False
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
@@ -58,8 +63,32 @@ Updater is currently busy attempting an install.
 '''
 }
 
-STATUS_THROB = "◐◓◑◒"
+if ST3:
+    STATUS_THROB = "◐◓◑◒"
+else:
+    STATUS_THROB = "-\\|/"
 STATUS_INDEX = 0
+
+
+def load_resource(resource, binary=False):
+    bfr = None
+    if ST3:
+        if not binary:
+            bfr = sublime.load_resource(resource)
+        else:
+            bfr = sublime.load_binary_resource(resource)
+    else:
+        resource = resource.replace("Packages/", "", 1)
+        if sublime.platform() == "windows":
+            resource = resource.replace("/", "\\")
+        try:
+            mode = "rb" if binary else "r"
+            with open(join(sublime.packages_path(), resource), mode) as f:
+                bfr = f.read()
+        except Exception as e:
+            print(e)
+    return bfr
+
 
 def parse_binary_path():
     return normpath(BINARY_PATH).replace("${Packages}", sublime.packages_path())
@@ -90,7 +119,7 @@ def read_versions():
             content = sanitize_json(f.read(), True)
         version = json.loads(content).get("version", None)
         content = sanitize_json(
-            sublime.load_resource("Packages/ColorSchemeEditor/version.json"),
+            load_resource("Packages/ColorSchemeEditor/version.json"),
             True
         )
         version_limits = json.loads(content).get(platform, None)
@@ -198,7 +227,20 @@ class GetBinary(threading.Thread):
             else:
                 makedirs(binpath)
         except Exception as e:
+            print(e)
             self.error_message = MSGS["install_directory"]
+
+    def download_file(self, url, destination):
+        if ST3:
+            with urllib.request.urlopen(url) as response:
+                with open(destination, 'wb') as out_file:
+                    shutil.copyfileobj(response, out_file)
+        else:
+            req = urllib2.Request(url)
+            response = urllib2.urlopen(req)
+            with open(destination, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+            response.close()
 
     def get_binary(self):
         binpath = parse_binary_path()
@@ -207,12 +249,12 @@ class GetBinary(threading.Thread):
             try:
                 temp = tempfile.mkdtemp(prefix="subclrschm")
                 file_name = join(temp, "subclrschm.zip")
-                with request.urlopen(REPO % sublime.platform()) as response, open(file_name, 'wb') as out_file:
-                    shutil.copyfileobj(response, out_file)
+                self.download_file(REPO % sublime.platform(), file_name)
                 unzip(file_name, binpath)
                 if exists(temp):
                     shutil.rmtree(temp)
             except Exception as e:
+                print(e)
                 self.error_message = MSGS["install_download"]
 
 
@@ -231,5 +273,10 @@ def binary_upgraded(callback):
 
 
 def unzip(source, dest_dir):
-    with zipfile.ZipFile(source) as z:
+    if ST3:
+        with zipfile.ZipFile(source) as z:
+            z.extractall(dest_dir)
+    else:
+        z = zipfile.ZipFile(source)
         z.extractall(dest_dir)
+        z.close()

@@ -7,10 +7,14 @@ import stat
 from fnmatch import fnmatch
 import subprocess
 import codecs
-from plistlib import writePlistToBytes
-from .lib.package_search import PackageSearch, sublime_package_paths
-from .lib.binary_manager import update_binary, check_version, get_binary_location
 
+ST3 = int(sublime.version()) >= 3000
+if ST3:
+    from .lib.package_search import PackageSearch
+    from .lib.binary_manager import update_binary, check_version, get_binary_location
+else:
+    from lib.package_search import PackageSearch
+    from lib.binary_manager import update_binary, check_version, get_binary_location
 
 PLUGIN_NAME = "ColorSchemeEditor"
 THEME_EDITOR = None
@@ -45,6 +49,26 @@ Would you like to download the subclrschm binary now?
 No updates available at this time.
 '''
 }
+
+def load_resource(resource, binary=False):
+    bfr = None
+    if ST3:
+        if not binary:
+            bfr = sublime.load_resource(resource)
+        else:
+            bfr = sublime.load_binary_resource(resource)
+    else:
+        resource = resource.replace("Packages/", "", 1)
+        if sublime.platform() == "windows":
+            resource = resource.replace("/", "\\")
+        try:
+            mode = "rb" if binary else "r"
+            with open(join(sublime.packages_path(), resource), mode) as f:
+                bfr = f.read()
+        except Exception as e:
+            print(e)
+            pass
+    return bfr
 
 
 def nix_check_permissions(bin):
@@ -98,7 +122,7 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
                     makedirs(zipped_themes)
 
                 # Read theme file into memory and write out to the temp directory
-                text = sublime.load_binary_resource(self.scheme_file)
+                text = load_resource(self.scheme_file, binary=True)
                 self.actual_scheme_file = join(zipped_themes, basename(self.scheme_file))
                 try:
                     with open(self.actual_scheme_file, "wb") as f:
@@ -160,7 +184,7 @@ class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
                 )
             else:
                 preferences = sublime.load_settings(PREFERENCES)
-                preferences.set(SCHEME, scheme_file)
+                preferences.set(SCHEME, settings[value])
         else:
             if self.current_color_scheme is not None:
                 preferences = sublime.load_settings(PREFERENCES)
@@ -239,3 +263,6 @@ def init_plugin():
 
 def plugin_loaded():
     init_plugin()
+
+if not ST3:
+    plugin_loaded()
