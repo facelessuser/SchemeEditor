@@ -1,12 +1,10 @@
 import sublime
 import sublime_plugin
 from os.path import join, exists, basename, normpath, dirname, isfile
-from os import listdir, walk, makedirs, chmod, unlink
+from os import listdir, makedirs, chmod, unlink
 from os import stat as osstat
 import stat
-from fnmatch import fnmatch
 import subprocess
-import codecs
 
 ST3 = int(sublime.version()) >= 3000
 if ST3:
@@ -49,6 +47,7 @@ Would you like to download the subclrschm binary now?
 No updates available at this time.
 '''
 }
+
 
 def load_resource(resource, binary=False):
     bfr = None
@@ -151,7 +150,6 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         # Prepare the theme to be edited
         # Copy to a temp location if desired before editing
         self.prepare_theme(action)
-
 
         # Call the editor with the theme file
         try:
@@ -262,7 +260,8 @@ def init_plugin():
 
 
 def plugin_loaded():
-    init_plugin()
+    sublime.set_timeout(init_plugin, 3000)
+
 
 if not ST3:
     plugin_loaded()

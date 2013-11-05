@@ -124,7 +124,7 @@ def read_versions():
         )
         version_limits = json.loads(content).get(platform, None)
         if (
-            version_limits is None  or
+            version_limits is None or
             version_limits.get("min", None) is None or
             version_limits.get("max", None) is None
         ):
@@ -256,7 +256,6 @@ class GetBinary(threading.Thread):
             except Exception as e:
                 print(e)
                 self.error_message = MSGS["install_download"]
-
 
     def run(self):
         global UPDATING

@@ -12,10 +12,6 @@ import zipfile
 
 ST3 = int(sublime.version()) >= 3000
 if ST3:
-    def sublime_package_paths():
-        return [sublime.installed_packages_path(), join(dirname(sublime.executable_path()), 'Packages')]
-
-
     class PackageSearch(object):
         def pre_process(self, **kwargs):
             return kwargs
@@ -29,7 +25,7 @@ if ST3:
         def find_files(self, files, pattern, settings, regex):
             for f in files:
                 if regex:
-                    if re.match(pattern, f[0], re.IGNORECASE) != None:
+                    if re.match(pattern, f[0], re.IGNORECASE) is not None:
                         settings.append([f[0].replace(self.packages, "").lstrip("\\").lstrip("/"), f[1]])
                 else:
                     if fnmatch(f[0], pattern):
@@ -46,7 +42,7 @@ if ST3:
 
         def search_zipped_files(self):
             plugins = []
-            st_packages = sublime_package_paths()
+            st_packages = [sublime.installed_packages_path(), join(dirname(sublime.executable_path()), 'Packages')]
             plugins += self.get_zip_packages(st_packages[0], "Installed")
             plugins += self.get_zip_packages(st_packages[1], "Default")
             return plugins
@@ -81,7 +77,7 @@ if ST3:
             else:
                 temp = sublime.find_resources("*")
                 for t in temp:
-                    if re.match(pattern, t, re.IGNORECASE) != None:
+                    if re.match(pattern, t, re.IGNORECASE) is not None:
                         resources.append(t)
 
             self.window.show_quick_panel(
@@ -116,7 +112,7 @@ else:
         def find_files(self, files, pattern, settings, regex):
             for f in files:
                 if regex:
-                    if re.match(pattern, f, re.IGNORECASE) != None:
+                    if re.match(pattern, f, re.IGNORECASE) is not None:
                         settings.append(f.replace(self.packages, "Packages").replace("\\", "/"))
                 else:
                     if fnmatch(f, pattern):
