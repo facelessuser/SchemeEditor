@@ -14,18 +14,6 @@ LOCK = threading.Lock()
 UPDATING = False
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 BINARY_PATH = "${Packages}/User/subclrschm"
-MIN_EXPECTED_VERSION = "0.0.5"
-MAX_EXPECTED_VERSION = "0.0.8"
-MIN_VERSION = {
-    "osx": MIN_EXPECTED_VERSION,
-    "windows": MIN_EXPECTED_VERSION,
-    "linux": MIN_EXPECTED_VERSION
-}
-MAX_VERSION = {
-    "osx": MAX_EXPECTED_VERSION,
-    "windows": MAX_EXPECTED_VERSION,
-    "linux": MAX_EXPECTED_VERSION
-}
 BINARY = {
     "windows": "subclrschm.exe",
     "osx": "subclrschm.app/Contents/MacOS/subclrschm",
@@ -93,8 +81,7 @@ def version_compare(version, min_version):
     )
 
 
-def check_version(editor, p_settings, upgrade_callback):
-    update_available = False
+def read_versions():
     platform = sublime.platform()
     version_file = join(parse_binary_path(), "subclrschm-bin-%s" % platform, "version.json")
     try:
@@ -102,23 +89,43 @@ def check_version(editor, p_settings, upgrade_callback):
             # Allow C style comments and be forgiving of trailing commas
             content = sanitize_json(f.read(), True)
         version = json.loads(content).get("version", None)
-    except:
+        content = sanitize_json(
+            sublime.load_resource("Packages/ColorSchemeEditor/version.json"),
+            True
+        )
+        version_limits = json.loads(content).get(platform, None)
+        if (
+            version_limits is None  or
+            version_limits.get("min", None) is None or
+            version_limits.get("max", None) is None
+        ):
+            version_limits = None
+    except Exception as e:
+        print(e)
+        version_limits = None
         version = None
+    return version, version_limits
 
-    if version is not None:
+
+def check_version(editor, p_settings, upgrade_callback):
+    update_available = False
+    version, version_limits = read_versions()
+
+    if version is not None and version_limits is not None:
         # True if versions are okay
-        ignore_key = "%s:%s" % (version, MAX_VERSION[platform])
-        if not version_compare(version, MIN_VERSION[platform]):
+        ignore_key = "%s:%s" % (version, version_limits["max"])
+        if not version_compare(version, version_limits["min"]):
             ignore_versions = str(p_settings.get("ignore_version_update", ""))
             if not ignore_key == ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
+                if sublime.ok_cancel_dialog(MSGS["upgrade"] % version_limits["max"], "Update"):
                     update_binary(upgrade_callback)
                     update_available = True
-                elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, MIN_VERSION[platform]), "Ignore"):
+                elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, version_limits["min"]), "Ignore"):
                     p_settings.set("ignore_version_update", ignore_key)
                     sublime.save_settings(PLUGIN_SETTINGS)
-        elif not version_compare(version, MAX_VERSION[platform]):
-            if sublime.ok_cancel_dialog(MSGS["upgrade"] % MAX_VERSION[platform], "Update"):
+
+        elif not version_compare(version, version_limits["max"]):
+            if sublime.ok_cancel_dialog(MSGS["upgrade"] % version_limits["max"], "Update"):
                 update_binary(upgrade_callback)
                 update_available = True
             elif sublime.ok_cancel_dialog(MSGS["ignore_critical"], "Ignore"):
