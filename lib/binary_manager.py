@@ -179,23 +179,19 @@ class GetBinary(threading.Thread):
         threading.Thread.__init__(self)
 
     def prepare_destination(self, binpath):
-        failed = False
         osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
-        if exists(binpath):
-            try:
+        try:
+            if exists(binpath):
                 if isdir(binpath):
                     if exists(osbinpath):
                         shutil.rmtree(osbinpath)
                 else:
                     remove(binpath)
                     makedirs(binpath)
-
-            except Exception as e:
-                failed = True
-                self.error_message = MSGS["install_directory"]
-        else:
-            makedirs(binpath)
-        return failed
+            else:
+                makedirs(binpath)
+        except Exception as e:
+            self.error_message = MSGS["install_directory"]
 
     def get_binary(self):
         binpath = parse_binary_path()
@@ -207,8 +203,11 @@ class GetBinary(threading.Thread):
                 with request.urlopen(REPO % sublime.platform()) as response, open(file_name, 'wb') as out_file:
                     shutil.copyfileobj(response, out_file)
                 unzip(file_name, binpath)
+                if exists(temp):
+                    shutil.rmtree(temp)
             except Exception as e:
                 self.error_message = MSGS["install_download"]
+
 
     def run(self):
         global UPDATING
