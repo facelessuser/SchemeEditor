@@ -137,7 +137,7 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         elif action != "new" and action != "select":
             self.file_select = True
 
-    def run(self, action=None, select_theme=None):
+    def run(self, action=None, select_theme=None, live_edit=None):
 
         # Check if the binary is available
         if not self.check_binary():
@@ -158,9 +158,8 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
                 (["-d"] if bool(self.p_settings.get("debug", False)) else []) +
                 (["-n"] if action == "new" else []) +
                 (["-s"] if self.file_select else []) +
-                (["-L"] if bool(self.p_settings.get("live_edit", True)) else []) +
+                (["-L"] if (live_edit is None and bool(self.p_settings.get("live_edit", True))) or (live_edit is not None and live_edit) else []) +
                 ["-l", join(sublime.packages_path(), "User")] +
-                # ["--sublime_paths", join(dirname(sublime.executable_path()), 'Packages'), sublime.installed_packages_path(), sublime.packages_path()] +
                 ([self.actual_scheme_file] if self.actual_scheme_file is not None and exists(self.actual_scheme_file) else [])
             )
         except:
