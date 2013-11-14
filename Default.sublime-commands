@@ -3,14 +3,15 @@
     // (copy to seperate location first and set to current theme)
     {
         "caption": "Color Scheme: Editor (file picker)",
-        "command": "color_scheme_editor"
+        "command": "color_scheme_editor",
+        "args": { "live_edit": false }
     },
     // Creates a new theme in the editor
     // (copy to seperate location first and set to current theme)
     {
         "caption": "Color Scheme: Editor (new theme)",
         "command": "color_scheme_editor",
-        "args": { "action": "new" }
+        "args": { "action": "new", "live_edit": false }
     },
     // Open the current theme in the editor
     // (copy to seperate location first and set to current theme)
@@ -39,5 +40,10 @@
     {
         "caption": "Color Scheme: Clear Temp Folder",
         "command": "color_scheme_clear_temp"
+    },
+    // Check for updates
+    {
+        "caption": "Color Scheme: Check for Editor Updates",
+        "command": "color_scheme_editor_upgrade"
     }
 ]
