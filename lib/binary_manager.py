@@ -4,7 +4,7 @@ import sublime
 import shutil
 import tempfile
 import zipfile
-from os import remove, makedirs
+from os import remove, makedirs, rmdir, remove
 from .file_strip.json import sanitize_json
 import json
 from os.path import join, exists, normpath, isdir
@@ -68,6 +68,40 @@ if ST3:
 else:
     STATUS_THROB = "-\\|/"
 STATUS_INDEX = 0
+
+
+def on_rm_error(func, path, exc_info):
+    excvalue = exc_info[1]
+    if func in (rmdir, remove):
+        chmod(path, stat.S_IRWXU| stat.S_IRWXG| stat.S_IRWXO) # 0777
+        try:
+            func(path)
+        except:
+            if sublime.platform() == "windows":
+                # Why are you being so stubborn windows?
+                # This situation only randomly occurs
+                print("Windows is being stubborn...go through rmdir to remove temp folder")
+                import subprocess
+                cmd = ["rmdir", "/S", path]
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                process = subprocess.Popen(
+                    cmd,
+                    startupinfo=startupinfo,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.PIPE,
+                    shell=False
+                )
+                returncode = process.returncode
+                if returncode:
+                    print("Why won't you play nice, Windows!")
+                    print(process.communicate()[0])
+                    raise
+            else:
+                raise
+    else:
+        raise
 
 
 def load_resource(resource, binary=False):
@@ -220,7 +254,7 @@ class GetBinary(threading.Thread):
             if exists(binpath):
                 if isdir(binpath):
                     if exists(osbinpath):
-                        shutil.rmtree(osbinpath)
+                        shutil.rmtree(osbinpath, onerror=on_rm_error)
                 else:
                     remove(binpath)
                     makedirs(binpath)
@@ -252,7 +286,7 @@ class GetBinary(threading.Thread):
                 self.download_file(REPO % sublime.platform(), file_name)
                 unzip(file_name, binpath)
                 if exists(temp):
-                    shutil.rmtree(temp)
+                    shutil.rmtree(temp, onerror=on_rm_error)
             except Exception as e:
                 print(e)
                 self.error_message = MSGS["install_download"]
