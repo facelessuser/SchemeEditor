@@ -27,9 +27,9 @@ BINARY = {
 REPO = "https://github.com/facelessuser/subclrschm-bin/archive/%s.zip"
 MSGS = {
     "ignore_critical": '''Color Scheme Editor:
-You are currently running version %s of subclrschm, %s is the minimum expected version.  Some features may not work. Please consider updating the editor for the best possible experience.
+You are currently running version %s of subclrschm, %s is outdated.  Some features may not work. Please consider updating the editor for the best possible experience.
 
-Do you want to ignore this update?
+Do you want to hide this message for this version in the future?
 ''',
 
     "ignore": '''Color Scheme Editor:
@@ -37,29 +37,13 @@ Do you want to ignore this update?
 ''',
 
     "upgrade": '''Color Scheme Editor:
-An new version of subclrschm is avalable (%s).
+A new version of subclrschm is avalable (%s).
 
 Do you want to update now?
 ''',
 
     "version": '''Color Scheme Editor:
 There was a problem comparing versions.
-''',
-
-    "install_directory": '''Color Scheme Editor:
-Failed trying to create/cleanup folder for subclrschm.  Please make sure subclrschm is not running.
-''',
-
-    "install_download": '''Color Scheme Editor:
-Failed to download and install subclrschm.
-''',
-
-    "install_success": '''Color Scheme Editor:
-subclrschm installed!
-''',
-
-    "install_busy": '''Color Scheme Editor:
-Updater is currently busy attempting an install.
 '''
 }
 
@@ -171,6 +155,8 @@ def read_versions():
 
 
 def check_version(editor, p_settings, upgrade_callback):
+    """Check version of old binary."""
+
     update_available = False
     version, version_limits = read_versions()
 
@@ -180,136 +166,31 @@ def check_version(editor, p_settings, upgrade_callback):
         if not version_compare(version, version_limits["min"]):
             ignore_versions = str(p_settings.get("ignore_version_update", ""))
             if not ignore_key == ignore_versions:
-                if sublime.ok_cancel_dialog(MSGS["upgrade"] % version_limits["max"], "Update"):
-                    update_binary(upgrade_callback)
-                    update_available = True
-                elif sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, version_limits["min"]), "Ignore"):
+
+                if sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, version_limits["min"]), "Ignore"):
                     p_settings.set("ignore_version_update", ignore_key)
                     sublime.save_settings(PLUGIN_SETTINGS)
 
         elif not version_compare(version, version_limits["max"]):
-            if sublime.ok_cancel_dialog(MSGS["upgrade"] % version_limits["max"], "Update"):
-                update_binary(upgrade_callback)
-                update_available = True
-            elif sublime.ok_cancel_dialog(MSGS["ignore_critical"], "Ignore"):
+            if sublime.ok_cancel_dialog(MSGS["ignore_critical"] % (version, version_limits["max"]), "Ignore"):
                 p_settings.set("ignore_version_update", ignore_key)
                 sublime.save_settings(PLUGIN_SETTINGS)
-    else:
-        sublime.error_message(MSGS["version"])
+    # If version cannot be found, we don't care as this is the legacy method.
+
     return update_available
 
 
-def update_binary(callback):
-    with LOCK:
-        updating = UPDATING
+def delete_old_binary(self):
+    """Delete old binary."""
 
-    if not updating:
-        t = GetBinary()
-        t.start()
-        MonitorThread(t, callback)
-    else:
-        sublime.error_message(MSGS["install_busy"])
-
-
-class MonitorThread():
-    def __init__(self, t, callback):
-        self.callback = callback
-        self.thread = t
-        sublime.set_timeout(lambda: self.__start_monitor(), 0)
-
-    def __throb(self):
-        global STATUS_INDEX
-        with LOCK:
-            if STATUS_INDEX == 3:
-                STATUS_INDEX = 0
+    binpath = parse_binary_path()
+    osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
+    try:
+        if exists(binpath):
+            if isdir(binpath):
+                if exists(osbinpath):
+                    shutil.rmtree(osbinpath, onerror=on_rm_error)
             else:
-                STATUS_INDEX += 1
-
-        sublime.status_message("Installing subclrschm %s" % STATUS_THROB[STATUS_INDEX])
-
-    def __start_monitor(self):
-        self.__throb()
-        sublime.set_timeout(lambda: self.__monitor(), 300)
-
-    def __monitor(self):
-        self.__throb()
-        if self.thread.is_alive():
-            sublime.set_timeout(self.__monitor, 300)
-        else:
-            if self.thread.error_message is not None:
-                sublime.set_timeout(lambda: sublime.error_message(self.thread.error_message), 100)
-            else:
-                sublime.set_timeout(lambda: binary_upgraded(self.callback), 100)
-
-
-class GetBinary(threading.Thread):
-    error_message = None
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def prepare_destination(self, binpath):
-        osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
-        try:
-            if exists(binpath):
-                if isdir(binpath):
-                    if exists(osbinpath):
-                        shutil.rmtree(osbinpath, onerror=on_rm_error)
-                else:
-                    remove(binpath)
-                    makedirs(binpath)
-            else:
-                makedirs(binpath)
-        except Exception as e:
-            print(e)
-            self.error_message = MSGS["install_directory"]
-
-    def download_file(self, url, destination):
-        if ST3:
-            with urllib.request.urlopen(url) as response:
-                with open(destination, 'wb') as out_file:
-                    shutil.copyfileobj(response, out_file)
-        else:
-            req = urllib2.Request(url)
-            response = urllib2.urlopen(req)
-            with open(destination, 'wb') as out_file:
-                shutil.copyfileobj(response, out_file)
-            response.close()
-
-    def get_binary(self):
-        binpath = parse_binary_path()
-        self.prepare_destination(binpath)
-        if self.error_message is None:
-            try:
-                temp = tempfile.mkdtemp(prefix="subclrschm")
-                file_name = join(temp, "subclrschm.zip")
-                self.download_file(REPO % sublime.platform(), file_name)
-                unzip(file_name, binpath)
-                if exists(temp):
-                    shutil.rmtree(temp, onerror=on_rm_error)
-            except Exception as e:
-                print(e)
-                self.error_message = MSGS["install_download"]
-
-    def run(self):
-        global UPDATING
-        with LOCK:
-            UPDATING = True
-        self.get_binary()
-        with LOCK:
-            UPDATING = False
-
-
-def binary_upgraded(callback):
-    sublime.message_dialog(MSGS["install_success"])
-    callback()
-
-
-def unzip(source, dest_dir):
-    if ST3:
-        with zipfile.ZipFile(source) as z:
-            z.extractall(dest_dir)
-    else:
-        z = zipfile.ZipFile(source)
-        z.extractall(dest_dir)
-        z.close()
+                remove(binpath)
+    except Exception as e:
+        print(e)

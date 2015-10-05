@@ -1,21 +1,17 @@
 import sublime
 import sublime_plugin
+import sys
 from os.path import join, exists, basename, normpath, dirname, isfile
 from os import listdir, makedirs, chmod, unlink
 from os import stat as osstat
 import stat
 import subprocess
 
-ST3 = int(sublime.version()) >= 3000
-if ST3:
-    from .lib.package_search import PackageSearch
-    from .lib.binary_manager import update_binary, check_version, get_binary_location
-else:
-    from lib.package_search import PackageSearch
-    from lib.binary_manager import update_binary, check_version, get_binary_location
+from .lib.package_search import PackageSearch
+from .lib.binary_manager import get_binary_location
 
+APP_NAME = "subclrschm"
 PLUGIN_NAME = "ColorSchemeEditor"
-THEME_EDITOR = None
 TEMP_FOLDER = "ColorSchemeEditorTemp"
 TEMP_PATH = "Packages/User/%s" % TEMP_FOLDER
 PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
@@ -25,6 +21,8 @@ THEMES = "theme-list.sublime-settings"
 
 
 MSGS = {
+    "missing": '''Cannot find Color Scheme Editor!''',
+
     "access": '''Color Scheme Editor:
 There was a problem calling subclrschm.
 ''',
@@ -48,36 +46,55 @@ No updates available at this time.
 '''
 }
 
+if sys.platform.startswith('win'):
+    _PLATFORM = "windows"
+elif sys.platform == "darwin":
+    _PLATFORM = "osx"
+else:
+    _PLATFORM = "linux"
+
+
+def get_environ():
+    """Get environment and force utf-8."""
+
+    import os
+    env = {}
+    env.update(os.environ)
+
+    if _PLATFORM != 'windows':
+        shell = env['SHELL']
+        p = subprocess.Popen(
+            [shell, '-l', '-c', 'echo "#@#@#${PATH}#@#@#"'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        result = p.communicate()[0].decode('utf8').split('#@#@#')
+        if len(result) > 1:
+            bin_paths = result[1].split(':')
+            if len(bin_paths):
+                env['PATH'] = ':'.join(bin_paths)
+
+    env['PYTHONIOENCODING'] = 'utf8'
+    env['LANG'] = 'en_US.UTF-8'
+    env['LC_CTYPE'] = 'en_US.UTF-8'
+
+    return env
+
 
 def load_resource(resource, binary=False):
+    """Load the given resource."""
+
     bfr = None
-    if ST3:
-        if not binary:
-            bfr = sublime.load_resource(resource)
-        else:
-            bfr = sublime.load_binary_resource(resource)
+    if not binary:
+        bfr = sublime.load_resource(resource)
     else:
-        resource = resource.replace("Packages/", "", 1)
-        if sublime.platform() == "windows":
-            resource = resource.replace("/", "\\")
-        try:
-            mode = "rb" if binary else "r"
-            with open(join(sublime.packages_path(), resource), mode) as f:
-                bfr = f.read()
-        except Exception as e:
-            print(e)
-            pass
+        bfr = sublime.load_binary_resource(resource)
     return bfr
-
-
-def nix_check_permissions(bin):
-    st = osstat(bin)
-    if not bool(st.st_mode & stat.S_IEXEC):
-        chmod(bin, st.st_mode | stat.S_IEXEC)
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
     def init_settings(self, action, select_theme):
+        """Initialize the settings."""
+
         init_okay = True
         # Get current color scheme
         self.p_settings = sublime.load_settings(PLUGIN_SETTINGS)
@@ -94,18 +111,9 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
                 init_okay = False
         return init_okay
 
-    def check_binary(self):
-        safe = True
-        if THEME_EDITOR is None or not exists(THEME_EDITOR):
-            if sublime.ok_cancel_dialog(MSGS["download"]):
-                update_binary(init_plugin)
-                safe = False
-        if safe:
-            if sublime.platform() in ["linux", "osx"]:
-                nix_check_permissions(THEME_EDITOR)
-        return safe
-
     def prepare_theme(self, action):
+        """Prepare the theme to be edited."""
+
         if action != "new" and self.scheme_file is not None and (action == "current" or action == "select"):
             # Get real path
             self.actual_scheme_file = join(dirname(sublime.packages_path()), normpath(self.scheme_file))
@@ -137,11 +145,21 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         elif action != "new" and action != "select":
             self.file_select = True
 
-    def run(self, action=None, select_theme=None, live_edit=None):
+    def is_live_edit(self, live_edit):
+        """Check if we should use live edit."""
 
-        # Check if the binary is available
-        if not self.check_binary():
-            return
+        return (
+            (live_edit is None and bool(self.p_settings.get("live_edit", True))) or
+            (live_edit is not None and live_edit)
+        )
+
+    def is_actual_scheme_file(self):
+        """Check if actual scheme file."""
+
+        return self.actual_scheme_file is not None and exists(self.actual_scheme_file)
+
+    def run(self, action=None, select_theme=None, live_edit=None):
+        """Run subclrschm."""
 
         # Init settings.  Bail if returned an issue
         if not self.init_settings(action, select_theme):
@@ -154,25 +172,34 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
         # Call the editor with the theme file
         try:
             subprocess.Popen(
-                [THEME_EDITOR] +
+                [APP_NAME] +
                 (["-d"] if bool(self.p_settings.get("debug", False)) else []) +
                 (["-n"] if action == "new" else []) +
                 (["-s"] if self.file_select else []) +
-                (["-L"] if (live_edit is None and bool(self.p_settings.get("live_edit", True))) or (live_edit is not None and live_edit) else []) +
+                (["-L"] if self.is_live_edit(live_edit) else []) +
                 ["-l", join(sublime.packages_path(), "User")] +
-                ([self.actual_scheme_file] if self.actual_scheme_file is not None and exists(self.actual_scheme_file) else [])
+                ([self.actual_scheme_file] if self.is_actual_scheme_file() else []),
+                env=get_environ()
             )
-        except:
+        except Exception as e:
+            print(e)
             sublime.error_message(MSGS["access"])
 
 
 class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
+
+    """Get color scheme files."""
+
     def on_select(self, value, settings):
+        """Process selected menu item."""
+
         if value != -1:
             preferences = sublime.load_settings(PREFERENCES)
             preferences.set(SCHEME, settings[value])
 
     def process_file(self, value, settings):
+        """Process the file."""
+
         if value != -1:
             if self.edit:
                 sublime.run_command(
@@ -188,23 +215,37 @@ class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
                 preferences.set(SCHEME, self.current_color_scheme)
 
     def pre_process(self, **kwargs):
+        """Pre-process actions."""
+
         self.edit = kwargs.get("edit", True)
         self.current_color_scheme = sublime.load_settings("Preferences.sublime-settings").get("color_scheme")
         return {"pattern": "*.tmTheme"}
 
     def run(self, **kwargs):
+        """Run the command."""
+
         self.search(**kwargs)
 
 
 class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
+
+    """Color scheme editor log command."""
+
     def run(self):
+        """Run the command."""
+
         log = join(sublime.packages_path(), "User", "subclrschm.log")
         if exists(log):
             self.window.open_file(log)
 
 
 class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
+
+    """Color scheme editor clear temp folder command."""
+
     def run(self):
+        """Run the command."""
+
         current_scheme = sublime.load_settings(PREFERENCES).get(SCHEME)
         using_temp = current_scheme.startswith(TEMP_PATH)
         folder = join(sublime.packages_path(), "User", TEMP_FOLDER)
@@ -225,42 +266,17 @@ class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
                 print("ColorSchemeEditor: Could not remove %s!" % pth)
 
 
-class ColorSchemeEditorUpgradeCommand(sublime_plugin.ApplicationCommand):
-    def run(self):
-        if THEME_EDITOR is None or not exists(THEME_EDITOR):
-            if sublime.ok_cancel_dialog(MSGS["download"]):
-                update_binary(init_plugin)
-        else:
-            if not check_version(THEME_EDITOR, sublime.load_settings(PLUGIN_SETTINGS), init_plugin):
-                sublime.message_dialog(MSGS["no_updates"])
-
-
 def init_plugin():
+    """Init the plugin."""
+
     global THEME_EDITOR
     platform = sublime.platform()
     p_settings = sublime.load_settings(PLUGIN_SETTINGS)
     p_settings.clear_on_change('reload')
-
-    # Pick the correct binary for the editor
-    THEME_EDITOR = get_binary_location()
-
-    if THEME_EDITOR is None or not exists(THEME_EDITOR):
-        THEME_EDITOR = None
-    elif platform in ["linux", "osx"]:
-        nix_check_permissions(THEME_EDITOR)
-
-    if THEME_EDITOR is not None:
-        check_version(THEME_EDITOR, p_settings, init_plugin)
-    else:
-        if sublime.ok_cancel_dialog(MSGS["download"]):
-            update_binary(init_plugin)
-
     p_settings.add_on_change('reload', init_plugin)
 
 
 def plugin_loaded():
+    """Load the plugin."""
+
     sublime.set_timeout(init_plugin, 3000)
-
-
-if not ST3:
-    plugin_loaded()
