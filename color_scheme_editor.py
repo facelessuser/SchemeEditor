@@ -1,14 +1,12 @@
+"""Color Scheme Editor."""
 import sublime
 import sublime_plugin
 import sys
-from os.path import join, exists, basename, normpath, dirname, isfile
-from os import listdir, makedirs, chmod, unlink
-from os import stat as osstat
-import stat
+from os.path import join, exists, basename, normpath, dirname, isfile, isdir
+from os import listdir, makedirs, unlink, rmdir, chmod
 import subprocess
 
 from .lib.package_search import PackageSearch
-from .lib.binary_manager import get_binary_location
 
 APP_NAME = "subclrschm"
 PLUGIN_NAME = "ColorSchemeEditor"
@@ -18,6 +16,7 @@ PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
 THEMES = "theme-list.sublime-settings"
+BINARY_PATH = "${Packages}/User/subclrschm"
 
 
 MSGS = {
@@ -33,16 +32,6 @@ Could not copy theme file to temp directory.
 
     "new": '''Color Scheme Editor:
 Could not create new theme.
-''',
-
-    "download": '''Color Scheme Editor:
-Subclrschm binary has not been downloaded.
-
-Would you like to download the subclrschm binary now?
-''',
-
-    "no_updates": '''Color Scheme Editor:
-No updates available at this time.
 '''
 }
 
@@ -92,6 +81,9 @@ def load_resource(resource, binary=False):
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
+
+    """Color scheme editor command."""
+
     def init_settings(self, action, select_theme):
         """Initialize the settings."""
 
@@ -266,11 +258,65 @@ class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
                 print("ColorSchemeEditor: Could not remove %s!" % pth)
 
 
+def delete_old_binary():
+    """Delete old binary."""
+
+    import shutil
+
+    binpath = normpath(BINARY_PATH).replace("${Packages}", sublime.packages_path())
+    osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
+    try:
+        if exists(binpath):
+            if isdir(binpath):
+                if exists(osbinpath):
+                    shutil.rmtree(osbinpath, onerror=on_rm_error)
+            else:
+                unlink(binpath)
+    except Exception as e:
+        print(e)
+
+
+def on_rm_error(func, path, exc_info):
+    """Try and handle rare windows delete issue gracefully."""
+
+    import stat
+
+    excvalue = exc_info[1]
+    if func in (rmdir, unlink):
+        chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 0777
+        try:
+            func(path)
+        except:
+            if sublime.platform() == "windows":
+                # Why are you being so stubborn windows?
+                # This situation only randomly occurs
+                print("Windows is being stubborn...go through rmdir to remove temp folder")
+                cmd = ["rmdir", "/S", path]
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                process = subprocess.Popen(
+                    cmd,
+                    startupinfo=startupinfo,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.PIPE,
+                    shell=False
+                )
+                returncode = process.returncode
+                if returncode:
+                    print("Why won't you play nice, Windows!")
+                    print(process.communicate()[0])
+                    raise
+            else:
+                raise
+    else:
+        raise
+
+
 def init_plugin():
     """Init the plugin."""
 
-    global THEME_EDITOR
-    platform = sublime.platform()
+    delete_old_binary()
     p_settings = sublime.load_settings(PLUGIN_SETTINGS)
     p_settings.clear_on_change('reload')
     p_settings.add_on_change('reload', init_plugin)
