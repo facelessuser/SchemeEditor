@@ -81,7 +81,6 @@ def load_resource(resource, binary=False):
 
 
 class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
-
     """Color scheme editor command."""
 
     def init_settings(self, action, select_theme):
@@ -179,7 +178,6 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
 
 
 class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
-
     """Get color scheme files."""
 
     def on_select(self, value, settings):
@@ -220,7 +218,6 @@ class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
 
 
 class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
-
     """Color scheme editor log command."""
 
     def run(self):
@@ -232,7 +229,6 @@ class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
 
 
 class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
-
     """Color scheme editor clear temp folder command."""
 
     def run(self):
@@ -281,7 +277,7 @@ def on_rm_error(func, path, exc_info):
 
     import stat
 
-    excvalue = exc_info[1]
+    # excvalue = exc_info[1]
     if func in (rmdir, unlink):
         chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 0777
         try:

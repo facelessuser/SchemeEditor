@@ -155,7 +155,6 @@ def get_packages():
 
 
 class PackageSearch(object):
-
     """Search packages."""
 
     def pre_process(self, **kwargs):
