@@ -93,7 +93,15 @@ All commands are available via the command palette.  Here are the included comma
     }
 ```
 
-# License
+## Questions
+
+*How can I get undefined scopes into the editor?*
+
+ScopeHunter is a plugin I wrote that you can configure to put the scope of what is under the cursor into your clipboard (it also can show you a lot of other stuff, but you configure it how you want it to work). So you can use that to quickly get the scope into your clipboard, then you can open up the scheme editor.
+
+The SublimeText3 documentation has a page on scope naming: http://www.sublimetext.com/docs/3/scope_naming.html.
+
+## License
 SchemeEditor plugin is released under the MIT license.
 
 Copyright (c) 2013 - 2017 Isaac Muse <isaacmuse@gmail.com>
