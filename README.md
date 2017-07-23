@@ -15,12 +15,12 @@ macOS
 
 Linux
 
-![Linux](https://github.com/facelessuser/subclrschm/blob/master/docs/src/markdown/images/CSE_NIX.png
+![Linux](https://github.com/facelessuser/subclrschm/blob/master/docs/src/markdown/images/CSE_NIX.png)
 
 ## Installation
 
 - Install this package in your Sublime `Packages` folder.
-- Pip install [subclrschm](https://pypi.python.org/pypi/subclrschm/) version 2.0.2+ in your local Python installation.
+- Pip install [subclrschm](https://pypi.python.org/pypi/subclrschm/) version 2.0.2+ in your local Python installation. See install instructions here: http://facelessuser.github.io/subclrschm/installation/.
 - Configure your `scheme_editor.sublime-settings` file to call `subclrschm`.
 
     ```js
