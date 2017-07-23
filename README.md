@@ -3,19 +3,19 @@ SchemeEditor
 
 Sublime Color Scheme Editor for Sublime Text
 
-# Supported Platforms
+## Supported Platforms
 
 Windows
 
-<img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_WIN.png" border="0"/>
+![Windows](https://github.com/facelessuser/subclrschm/blob/master/docs/src/markdown/images/CSE_WIN.png)
 
 macOS
 
-<img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_OSX.png" border="0"/>
+![macOS](https://github.com/facelessuser/subclrschm/blob/master/docs/src/markdown/images/CSE_OSX.png)
 
 Linux
 
-<img src="https://dl.dropboxusercontent.com/u/342698/ColorSchemeEditor/CSE_NIX.png" border="0"/>
+![Linux](https://github.com/facelessuser/subclrschm/blob/master/docs/src/markdown/images/CSE_NIX.png
 
 ## Installation
 
