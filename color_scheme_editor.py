@@ -1,36 +1,29 @@
-"""Color Scheme Editor."""
+"""Scheme Editor."""
 import sublime
 import sublime_plugin
 import sys
-from os.path import join, exists, basename, normpath, dirname, isfile, isdir
-from os import listdir, makedirs, unlink, rmdir, chmod
+import os
 import subprocess
 
 from .lib.package_search import PackageSearch
 
-APP_NAME = "subclrschm"
-PLUGIN_NAME = "ColorSchemeEditor"
-TEMP_FOLDER = "ColorSchemeEditorTemp"
+TEMP_FOLDER = "SchemeEditorTemp"
 TEMP_PATH = "Packages/User/%s" % TEMP_FOLDER
-PLUGIN_SETTINGS = 'color_scheme_editor.sublime-settings'
+PLUGIN_SETTINGS = 'scheme_editor.sublime-settings'
 PREFERENCES = 'Preferences.sublime-settings'
 SCHEME = "color_scheme"
-THEMES = "theme-list.sublime-settings"
-BINARY_PATH = "${Packages}/User/subclrschm"
 
 
 MSGS = {
-    "missing": '''Cannot find Color Scheme Editor!''',
-
-    "access": '''Color Scheme Editor:
+    "access": '''Scheme Editor:
 There was a problem calling subclrschm.
 ''',
 
-    "temp": '''Color Scheme Editor:
+    "temp": '''Scheme Editor:
 Could not copy theme file to temp directory.
 ''',
 
-    "new": '''Color Scheme Editor:
+    "new": '''Scheme Editor:
 Could not create new theme.
 '''
 }
@@ -80,7 +73,7 @@ def load_resource(resource, binary=False):
     return bfr
 
 
-class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
+class SchemeEditorCommand(sublime_plugin.ApplicationCommand):
     """Color scheme editor command."""
 
     def init_settings(self, action, select_theme):
@@ -107,21 +100,23 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
 
         if action != "new" and self.scheme_file is not None and (action == "current" or action == "select"):
             # Get real path
-            self.actual_scheme_file = join(dirname(sublime.packages_path()), normpath(self.scheme_file))
+            self.actual_scheme_file = os.path.join(
+                os.path.dirname(sublime.packages_path()), os.path.normpath(self.scheme_file)
+            )
 
             # If scheme cannot be found, it is most likely in an archived package
             if (
-                not exists(self.actual_scheme_file) or
+                not os.path.exists(self.actual_scheme_file) or
                 (not self.direct_edit and not self.scheme_file.startswith(TEMP_PATH))
             ):
                 # Create temp folder
-                zipped_themes = join(sublime.packages_path(), "User", TEMP_FOLDER)
-                if not exists(zipped_themes):
-                    makedirs(zipped_themes)
+                zipped_themes = os.path.join(sublime.packages_path(), "User", TEMP_FOLDER)
+                if not os.path.exists(zipped_themes):
+                    os.makedirs(zipped_themes)
 
                 # Read theme file into memory and write out to the temp directory
                 text = load_resource(self.scheme_file, binary=True)
-                self.actual_scheme_file = join(zipped_themes, basename(self.scheme_file))
+                self.actual_scheme_file = os.path.join(zipped_themes, os.path.basename(self.scheme_file))
                 try:
                     with open(self.actual_scheme_file, "wb") as f:
                         f.write(text)
@@ -130,7 +125,7 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
                     return
 
                 # Load unarchived theme
-                self.settings.set(SCHEME, "%s/%s" % (TEMP_PATH, basename(self.scheme_file)))
+                self.settings.set(SCHEME, "%s/%s" % (TEMP_PATH, os.path.basename(self.scheme_file)))
             elif action == "select":
                 self.settings.set(SCHEME, self.scheme_file)
         elif action != "new" and action != "select":
@@ -147,7 +142,7 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
     def is_actual_scheme_file(self):
         """Check if actual scheme file."""
 
-        return self.actual_scheme_file is not None and exists(self.actual_scheme_file)
+        return self.actual_scheme_file is not None and os.path.exists(self.actual_scheme_file)
 
     def run(self, action=None, select_theme=None, live_edit=None):
         """Run subclrschm."""
@@ -162,22 +157,26 @@ class ColorSchemeEditorCommand(sublime_plugin.ApplicationCommand):
 
         # Call the editor with the theme file
         try:
-            subprocess.Popen(
-                [APP_NAME] +
-                (["-d"] if bool(self.p_settings.get("debug", False)) else []) +
+            cmd = (
+                self.p_settings.get('editor', {}).get(sublime.platform(), ['python', '-m', 'subclrschm']) +
+                (["--debug"] if bool(self.p_settings.get("debug", False)) else []) +
                 (["-n"] if action == "new" else []) +
                 (["-s"] if self.file_select else []) +
                 (["-L"] if self.is_live_edit(live_edit) else []) +
-                ["-l", join(sublime.packages_path(), "User")] +
-                ([self.actual_scheme_file] if self.is_actual_scheme_file() else []),
+                ["-l", os.path.join(sublime.packages_path(), "User")] +
+                ([self.actual_scheme_file] if self.is_actual_scheme_file() else [])
+            )
+            print(cmd)
+            subprocess.Popen(
+                cmd,
                 env=get_environ()
             )
         except Exception as e:
-            print(e)
+            print("SchemeEditor: " + str(e))
             sublime.error_message(MSGS["access"])
 
 
-class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
+class SchemeEditorGetSchemeCommand(sublime_plugin.WindowCommand, PackageSearch):
     """Get color scheme files."""
 
     def on_select(self, value, settings):
@@ -193,7 +192,7 @@ class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
         if value != -1:
             if self.edit:
                 sublime.run_command(
-                    "color_scheme_editor",
+                    "scheme_editor",
                     {"action": "select", "select_theme": settings[value]}
                 )
             else:
@@ -217,18 +216,18 @@ class GetColorSchemeFilesCommand(sublime_plugin.WindowCommand, PackageSearch):
         self.search(**kwargs)
 
 
-class ColorSchemeEditorLogCommand(sublime_plugin.WindowCommand):
+class SchemeEditorLogCommand(sublime_plugin.WindowCommand):
     """Color scheme editor log command."""
 
     def run(self):
         """Run the command."""
 
-        log = join(sublime.packages_path(), "User", "subclrschm.log")
-        if exists(log):
+        log = os.path.join(sublime.packages_path(), "User", "subclrschm.log")
+        if os.path.exists(log):
             self.window.open_file(log)
 
 
-class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
+class SchemeEditorClearTempCommand(sublime_plugin.ApplicationCommand):
     """Color scheme editor clear temp folder command."""
 
     def run(self):
@@ -236,22 +235,21 @@ class ColorSchemeClearTempCommand(sublime_plugin.ApplicationCommand):
 
         current_scheme = sublime.load_settings(PREFERENCES).get(SCHEME)
         using_temp = current_scheme.startswith(TEMP_PATH)
-        folder = join(sublime.packages_path(), "User", TEMP_FOLDER)
-        for f in listdir(folder):
-            pth = join(folder, f)
+        folder = os.path.join(sublime.packages_path(), "User", TEMP_FOLDER)
+        for f in os.listdir(folder):
+            pth = os.path.join(folder, f)
             try:
                 if (
-                    isfile(pth) and
+                    os.path.isfile(pth) and
                     (
                         not using_temp or (
-                            basename(pth) != basename(current_scheme) and
-                            basename(pth) != basename(current_scheme) + ".JSON"
+                            os.path.basename(pth) != os.path.basename(current_scheme)
                         )
                     )
                 ):
-                    unlink(pth)
+                    os.unlink(pth)
             except:
-                print("ColorSchemeEditor: Could not remove %s!" % pth)
+                print("SchemeEditor: Could not remove %s!" % pth)
 
 
 def delete_old_binary():
@@ -259,17 +257,17 @@ def delete_old_binary():
 
     import shutil
 
-    binpath = normpath(BINARY_PATH).replace("${Packages}", sublime.packages_path())
-    osbinpath = join(binpath, "subclrschm-bin-%s" % sublime.platform())
+    binpath = os.path.normpath("${Packages}/User/subclrschm").replace("${Packages}", sublime.packages_path())
+    osbinpath = os.path.join(binpath, "subclrschm-bin-%s" % sublime.platform())
     try:
-        if exists(binpath):
-            if isdir(binpath):
-                if exists(osbinpath):
+        if os.path.exists(binpath):
+            if os.path.isdir(binpath):
+                if os.path.exists(osbinpath):
                     shutil.rmtree(osbinpath, onerror=on_rm_error)
             else:
-                unlink(binpath)
+                os.unlink(binpath)
     except Exception as e:
-        print(e)
+        print("SchemeEditor: " + str(e))
 
 
 def on_rm_error(func, path, exc_info):
@@ -278,15 +276,15 @@ def on_rm_error(func, path, exc_info):
     import stat
 
     # excvalue = exc_info[1]
-    if func in (rmdir, unlink):
-        chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 0777
+    if func in (os.rmdir, os.unlink):
+        os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 0777
         try:
             func(path)
         except:
             if sublime.platform() == "windows":
                 # Why are you being so stubborn windows?
                 # This situation only randomly occurs
-                print("Windows is being stubborn...go through rmdir to remove temp folder")
+                print("SchemeEditor: Windows is being stubborn...go through rmdir to remove temp folder")
                 cmd = ["rmdir", "/S", path]
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -300,8 +298,8 @@ def on_rm_error(func, path, exc_info):
                 )
                 returncode = process.returncode
                 if returncode:
-                    print("Why won't you play nice, Windows!")
-                    print(process.communicate()[0])
+                    print("SchemeEditor: Why won't you play nice, Windows!")
+                    print("SchemeEditor:\n" + str(process.communicate()[0]))
                     raise
             else:
                 raise

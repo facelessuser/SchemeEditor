@@ -1,0 +1,25 @@
+{
+    // Enable debugging in the log file: subclrschm.log
+    "debug": false,
+
+    // Enable or disable live editing
+    // (live editing saves to the file right after changes are made)
+    // This is not enabled by default for open with file picker and new themes
+    "live_edit": true,
+
+    // Enable or disable direct editing
+    // All files are copied to a temp location before editing.
+    // If direct edit is enabled, the file will be edited directly
+    // except in cases where the theme file is inside a sublime-packages
+    // archive
+    "direct_edit": false,
+
+    // Path of subclrschm app
+    // Just setup call to the app. No need to setup app options as that is controlled
+    // by the plugin.
+    "editor": {
+        "windows": ["python", "-m", "subclrschm"],
+        "osx": ["python", "-m", "subclrschm"],
+        "linux": ["python", "-m", "subclrschm"]
+    }
+}
