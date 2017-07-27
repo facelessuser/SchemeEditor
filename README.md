@@ -48,6 +48,11 @@ Linux
     // except in cases where the theme file is inside a sublime-packages
     // archive
     "direct_edit": false,
+
+    // Allow multiple instances.  By default, the editor will only allow one
+    // instance, and if other instances are opened, there arguments will be sent
+    // to the one already open.
+    "multiple_instances": false,
 ```
 
 ## Usage

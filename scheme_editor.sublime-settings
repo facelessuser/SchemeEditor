@@ -14,6 +14,11 @@
     // archive
     "direct_edit": false,
 
+    // Allow multiple instances.  By default, the editor will only allow one
+    // instance, and if other instances are opened, there arguments will be sent
+    // to the one already open.
+    "multiple_instances": false,
+
     // Path of subclrschm app
     // Just setup call to the app. No need to setup app options as that is controlled
     // by the plugin.
