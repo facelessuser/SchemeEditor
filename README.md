@@ -3,6 +3,8 @@ SchemeEditor
 
 Sublime Color Scheme Editor for Sublime Text
 
+**NOTE**: As Sublime Text has moved away from tmTheme in favor of their new sublime-color-scheme format, motivation to continue working on this tool is not what it used to be. For the forseable future, all development is halted on this project.
+
 ## Supported Platforms
 
 Windows
